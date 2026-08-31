@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recalculate Transitions - Config Panel</title>
+    <style>
+        :root {
+            /* Main Layout Colors */
+            --primary: #2563EB;
+            --bg: #F8FAFC;
+            --card-bg: #FFFFFF;
+            --text-main: #1E293B;
+            --text-muted: #475569;
+
+            /* Blender Theme Colors */
+            --b-bg: #2b2b2b;
+            --b-panel-bg: #303030;
+            --b-header: #424242;
+            --b-header-hover: #4d4d4d;
+            --b-btn: #545454;
+            --b-btn-hover: #656565;
+            --b-text: #cccccc;
+            --b-text-dark: #999999;
+            --b-active: #4772b3;
+            --b-border: #1d1d1d;
+            --b-border-light: #3d3d3d;
+            --b-input: #1e1e1e;
+            --b-tab-bg: #232323;
+            --b-tab-active: #303030;
+        }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            margin: 0;
+            padding: 2rem;
+            display: flex;
+            height: 100vh;
+            box-sizing: border-box;
+            gap: 2rem;
+        }
+
+        /* -----------------------------------------
+           Blender Native UI Mock
+        ----------------------------------------- */
+        .blender-container {
+            flex: 0 0 400px;
+            width: 400px;
+            transition: margin-left 0.3s ease, opacity 0.3s ease;
+            display: flex;
+            background: var(--b-bg);
+            border-radius: 12px;
+            box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.3);
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 14px;
+            color: var(--b-text);
+            user-select: none;
+        }
+
+        .blender-container.hidden {
+            margin-left: calc(-400px - 2rem);
+            opacity: 0;
+        }
+
+        /* Sidebar content */
+        .b-sidebar {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            background: var(--b-panel-bg);
+            border-right: 1px solid var(--b-border);
+        }
+
+        /* Right Vertical Tabs */
+        .b-tabs {
+            flex: 0 0 32px;
+            background: var(--b-tab-bg);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 8px;
+        }
+        .b-tab {
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            padding: 12px 0;
+            width: 100%;
+            text-align: center;
+            color: var(--b-text-dark);
+            cursor: pointer;
+            border-left: 3px solid transparent;
+            font-size: 13px;
+        }
+        .b-tab.active {
+            color: var(--b-text);
+            background: var(--b-panel-bg);
+            border-left: 3px solid var(--b-active);
+        }
+
+        /* Panels */
+        .b-panel {
+            border-bottom: 1px solid var(--b-border);
+        }
+        .b-header {
+            display: flex;
+            align-items: center;
+            padding: 6px 12px;
+            background: var(--b-header);
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .b-header:hover {
+            background: var(--b-header-hover);
+        }
+        .b-header.disabled {
+            color: var(--b-text-dark);
+        }
+        .b-icon {
+            width: 16px;
+            text-align: center;
+            margin-right: 6px;
+            color: var(--b-text-dark);
+            font-size: 12px;
+        }
+
+        /* Panel Body Elements */
+        .b-body {
+            padding: 8px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        
+        .b-row {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+        }
+        .b-row.split {
+            justify-content: space-between;
+        }
+
+        /* Buttons & Inputs */
+        .b-btn {
+            background: var(--b-btn);
+            border: 1px solid var(--b-border);
+            border-radius: 4px;
+            color: var(--b-text);
+            padding: 4px 8px;
+            cursor: pointer;
+            text-align: center;
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 6px;
+        }
+        .b-btn:hover {
+            background: var(--b-btn-hover);
+        }
+        .b-input-group {
+            display: flex;
+            background: var(--b-btn);
+            border: 1px solid var(--b-border);
+            border-radius: 4px;
+            overflow: hidden;
+            flex: 1;
+        }
+        .b-input-group .b-btn {
+            border: none;
+            border-radius: 0;
+            border-right: 1px solid var(--b-border-light);
+        }
+        .b-input-group .b-btn:last-child {
+            border-right: none;
+        }
+        
+        .b-select {
+            background: var(--b-btn);
+            border: 1px solid var(--b-border);
+            border-radius: 4px;
+            color: var(--b-text);
+            padding: 4px 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            flex: 1;
+        }
+
+        /* Property List (Label + Value) */
+        .b-prop-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .b-prop-label {
+            flex: 0 0 40%;
+            text-align: right;
+            color: var(--b-text);
+        }
+        .b-prop-value {
+            flex: 1;
+            background: var(--b-btn);
+            border: 1px solid var(--b-border);
+            border-radius: 4px;
+            padding: 4px 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .b-prop-value.input {
+            background: var(--b-input);
+            cursor: text;
+        }
+
+        /* List Box (Storyboard) */
+        .b-listbox-container {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+        .b-listbox {
+            flex: 1;
+            background: var(--b-input);
+            border: 1px solid var(--b-border);
+            border-radius: 4px;
+            height: 120px;
+            overflow-y: auto;
+            padding: 4px;
+        }
+        .b-listbox-item {
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-bottom: 2px;
+        }
+        .b-listbox-item.active {
+            background: var(--b-active);
+            color: white;
+        }
+        .b-listbox-tools {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .b-listbox-tools .b-btn {
+            flex: none;
+            padding: 4px;
+            width: 24px;
+            height: 24px;
+        }
+
+        /* Checkbox */
+        .b-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            padding: 4px 0;
+        }
+        .b-check-box {
+            width: 14px;
+            height: 14px;
+            background: var(--b-input);
+            border: 1px solid var(--b-border);
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .b-check-box.checked::after {
+            content: '✓';
+            font-size: 10px;
+        }
+
+        /* HOTSPOT STYLING */
+        .hotspot-header {
+            position: relative;
+            background: rgba(37, 99, 235, 0.15) !important;
+            border-left: 4px solid var(--primary);
+            transition: all 0.3s ease;
+            padding-left: 8px; /* adjust for border */
+        }
+        .hotspot-header:hover {
+            background: rgba(37, 99, 235, 0.25) !important;
+            box-shadow: inset 0 0 15px rgba(37, 99, 235, 0.2);
+        }
+        .magnifying-glass {
+            width: 20px;
+            height: 20px;
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="%232563EB" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>');
+            background-size: cover;
+            position: absolute;
+            right: 12px;
+            animation: pulse 2s infinite;
+            background-color: white;
+            border-radius: 50%;
+            padding: 3px;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7); }
+            70% { transform: scale(1.2); box-shadow: 0 0 0 8px rgba(37, 99, 235, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+        }
+
+        /* -----------------------------------------
+           Right/Bottom Pane - Iframe
+        ----------------------------------------- */
+        .content-pane {
+            flex: 1;
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        .instruction {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: var(--text-muted);
+            text-align: center;
+            padding: 2rem;
+            transition: opacity 0.3s;
+        }
+        .instruction svg {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 1rem;
+            color: var(--primary);
+            opacity: 0.5;
+        }
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            opacity: 0;
+            transition: opacity 0.5s ease-in;
+        }
+        iframe.active {
+            opacity: 1;
+        }
+
+        /* Toggle Button */
+        .toggle-btn {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            z-index: 50;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 8px;
+            cursor: pointer;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        .toggle-btn:hover {
+            color: var(--primary);
+            background: #f8fafc;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Native HTML Blender Panel Mock -->
+    <div class="blender-container">
+        <!-- Main Sidebar Content -->
+        <div class="b-sidebar">
+            
+            <!-- Formations Panel -->
+            <div class="b-panel">
+                <div class="b-header">
+                    <span class="b-icon">∨</span> Formations
+                </div>
+                <div class="b-body">
+                    <div class="b-btn"><span>＋</span> Create Takeoff Grid</div>
+                    <div class="b-input-group">
+                        <div class="b-btn">⏏ Takeoff</div>
+                        <div class="b-btn">⌂ RTH</div>
+                        <div class="b-btn">▼ Land</div>
+                    </div>
+                    <div class="b-input-group" style="background: var(--b-input);">
+                        <div class="b-btn" style="flex: 0 0 auto; background: transparent;">📦</div>
+                        <div style="flex: 1; padding: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">NiuLai_Profile_ImageBa...</div>
+                        <div class="b-btn" style="flex: 0 0 auto; background: transparent;">✕</div>
+                        <div class="b-btn" style="flex: 0 0 auto; background: transparent;">＋</div>
+                        <div class="b-btn" style="flex: 0 0 auto; background: transparent;">✕</div>
+                    </div>
+                    <div class="b-input-group">
+                        <div class="b-btn">Select</div>
+                        <div class="b-btn">Deselect</div>
+                        <div class="b-btn">Stats</div>
+                    </div>
+                    <div class="b-select">
+                        <span>✨ Generate Markers</span> <span>▼</span>
+                    </div>
+                    <div class="b-btn">→ Append</div>
+                    <div class="b-row">
+                        <div class="b-btn">↺ Update</div>
+                        <div class="b-select" style="flex: 1;">
+                            <span>≡ Reorder</span> <span>▼</span>
+                        </div>
+                    </div>
+                    <div class="b-checkbox">
+                        <div class="b-check-box"></div>
+                        <span>Show order of markers</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Storyboard Panel -->
+            <div class="b-panel">
+                <div class="b-header">
+                    <span class="b-icon">∨</span> Storyboard
+                </div>
+                <div class="b-body">
+                    <div class="b-listbox-container">
+                        <div class="b-listbox">
+                            <div class="b-listbox-item">Takeoff grid</div>
+                            <div class="b-listbox-item">Takeoff</div>
+                            <div class="b-listbox-item">NiuLai_Profile_ImageBased</div>
+                            <div class="b-listbox-item">Return to home</div>
+                            <div class="b-listbox-item active">Landing</div>
+                            <div style="color: var(--b-text-dark); padding-top: 4px;">▶ &nbsp; &nbsp; ∷</div>
+                        </div>
+                        <div class="b-listbox-tools">
+                            <div class="b-btn" id="append-formation-hotspot" style="position: relative;" title="Click to view Append Formation graph">
+                                ＋
+                                <div class="magnifying-glass" style="width: 14px; height: 14px; right: -8px; top: -8px; padding: 2px;"></div>
+                            </div>
+                            <div class="b-btn">－</div>
+                            <div class="b-btn" style="margin-top: 8px;">↑</div>
+                            <div class="b-btn">↓</div>
+                            <div class="b-btn" style="margin-top: 8px;">▼</div>
+                        </div>
+                    </div>
+
+                    <!-- Properties -->
+                    <div class="b-prop-row">
+                        <div class="b-prop-label">Formation</div>
+                        <div class="b-prop-value"><span>📦 Landing</span> <span>✕</span></div>
+                    </div>
+                    <div class="b-prop-row">
+                        <div class="b-prop-label">Start Frame</div>
+                        <div class="b-prop-value input"><span>2476</span> <span style="color: var(--b-text-dark);">◀</span></div>
+                    </div>
+                    <div class="b-prop-row">
+                        <div class="b-prop-label">Duration</div>
+                        <div class="b-prop-value input"><span>1</span> <span style="color: var(--b-text-dark);">◀</span></div>
+                    </div>
+                    <div class="b-prop-row">
+                        <div class="b-prop-label">End Frame</div>
+                        <div class="b-prop-value input"><span>2476</span> <span style="color: var(--b-text-dark);">◀</span></div>
+                    </div>
+                    <div class="b-prop-row">
+                        <div class="b-prop-label">Purpose</div>
+                        <div class="b-prop-value"><span>Landing</span> <span>▼</span></div>
+                    </div>
+                    
+                    <div class="b-checkbox" style="justify-content: center; margin-top: 4px;">
+                        <div class="b-check-box"></div>
+                        <span>Custom Name</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transition from previous (Disabled) -->
+            <div class="b-panel">
+                <div class="b-header disabled">
+                    <span class="b-icon">⤡</span> Transition from previous <span style="margin-left:auto;">∨</span>
+                </div>
+            </div>
+
+            <!-- Transition to next (Disabled) -->
+            <div class="b-panel">
+                <div class="b-header disabled">
+                    <span class="b-icon">⤢</span> Transition to next <span style="margin-left:auto;">∨</span>
+                </div>
+            </div>
+
+            <!-- Recalculate Transitions (HOTSPOT) -->
+            <div class="b-panel">
+                <div class="b-header hotspot-header" id="recalc-hotspot" title="Click to view Recalculate Transitions graph">
+                    <span class="b-icon" style="color: var(--b-text);">✨</span> 
+                    <span>Recalculate Transitions</span> 
+                    <span style="margin-left:auto; color: var(--b-text-dark); margin-right: 30px;">∨</span>
+                    <div class="magnifying-glass"></div>
+                </div>
+            </div>
+
+            <!-- Bottom Button -->
+            <div style="padding: 12px; margin-top: auto;">
+                <div class="b-btn" style="padding: 6px;">≡ Update Time Markers</div>
+            </div>
+
+        </div>
+
+        <!-- Vertical Tabs -->
+        <div class="b-tabs">
+            <div class="b-tab">Item</div>
+            <div class="b-tab">Tool</div>
+            <div class="b-tab">View</div>
+            <div class="b-tab">Animation</div>
+            <div class="b-tab">Skybrush</div>
+            <div class="b-tab active">Formations</div>
+            <div class="b-tab">LEDs</div>
+            <div class="b-tab">Pyro</div>
+            <div class="b-tab">Safety & Export</div>
+            <div class="b-tab">BlenderMCP</div>
+        </div>
+    </div>
+
+    <!-- Details Pane with Iframe -->
+    <div class="content-pane" id="content-pane">
+        <button id="toggle-pane-btn" class="toggle-btn" title="Toggle left panel">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+        </button>
+        <div class="instruction" id="instruction">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"></path>
+            </svg>
+            <div>点击左侧面板中带有 <strong>放大镜图标</strong> 的区域<br>以在此处查看对应的执行流程图</div>
+            <div style="font-size: 1.25rem; margin-top: 0.5rem; color: #94A3B8;">(Click any area with a magnifying glass icon on the left panel to view its process graph)</div>
+        </div>
+        
+        <iframe id="graph-iframe" src="about:blank" title="Recalculate Transitions Graph"></iframe>
+    </div>
+
+    <script>
+        const hotspot = document.getElementById('recalc-hotspot');
+        const appendHotspot = document.getElementById('append-formation-hotspot');
+        const instruction = document.getElementById('instruction');
+        const iframe = document.getElementById('graph-iframe');
+        const toggleBtn = document.getElementById('toggle-pane-btn');
+        const blenderContainer = document.querySelector('.blender-container');
+
+        toggleBtn.addEventListener('click', () => {
+            blenderContainer.classList.toggle('hidden');
+        });
+
+        hotspot.addEventListener('click', () => {
+            // Hide instruction
+            instruction.style.opacity = '0';
+            setTimeout(() => {
+                instruction.style.display = 'none';
+            }, 300);
+
+            // Load iframe content and show it
+            iframe.src = 'pages/recalculate_transitions_graph.html';
+            iframe.onload = () => {
+                iframe.classList.add('active');
+            };
+        });
+
+        appendHotspot.addEventListener('click', () => {
+            // Hide instruction
+            instruction.style.opacity = '0';
+            setTimeout(() => {
+                instruction.style.display = 'none';
+            }, 300);
+
+            // Load iframe content and show it
+            iframe.src = 'pages/append_formation_to_storyboard_graph.html';
+            iframe.onload = () => {
+                iframe.classList.add('active');
+            };
+        });
+    </script>
+</body>
+</html>

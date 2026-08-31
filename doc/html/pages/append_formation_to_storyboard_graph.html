@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Append Formation to Storyboard Process Graph</title>
+    <style>
+        :root {
+            --primary: #2563EB;
+            --primary-light: #DBEAFE;
+            --bg: #F8FAFC;
+            --card-bg: #FFFFFF;
+            --text-main: #1E293B;
+            --text-muted: #475569;
+            --border: #E2E8F0;
+            --hover-bg: #EFF6FF;
+            --code-bg: #F1F5F9;
+        }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            margin: 0;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            gap: 2rem;
+            font-size: 1rem;
+            min-height: 100vh;
+        }
+        .main-container {
+            display: flex;
+            gap: 2rem;
+            min-height: 800px;
+        }
+        .bottom-pane {
+            display: flex;
+            flex-direction: column;
+        }
+        h1, h2 {
+            color: var(--primary);
+            font-size: 1.5rem; 
+            margin-top: 0;
+            margin-bottom: 1.5rem;
+            border-bottom: 2px solid var(--primary-light);
+            padding-bottom: 0.5rem;
+        }
+        .pane {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+            flex: 1;
+        }
+        .left-pane {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .right-pane {
+            display: none;
+            border-left: 6px solid var(--primary);
+        }
+        .node {
+            background: var(--card-bg);
+            border: 2px solid var(--primary);
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            margin: 0.5rem 0;
+            width: 80%;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease-out;
+            font-size: 1.125rem; 
+            position: relative;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);
+        }
+        .node:hover, .node.active {
+            background: var(--hover-bg);
+            transform: translateX(8px) scale(1.01);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+        .node.has-children::after {
+            content: '▶';
+            position: absolute;
+            right: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--primary);
+            font-size: 1.25rem;
+        }
+        .node strong {
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+        .arrow {
+            width: 4px;
+            height: 30px;
+            background-color: var(--primary);
+            position: relative;
+        }
+        .arrow::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: -8px;
+            border-width: 10px 10px 0;
+            border-style: solid;
+            border-color: var(--primary) transparent transparent transparent;
+        }
+        .details-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .details-list > li {
+            font-size: 1.125rem;
+            padding: 1rem;
+            border-bottom: 1px dashed var(--border);
+            margin-bottom: 0.5rem;
+        }
+        .details-list > li:last-child {
+            border-bottom: none;
+        }
+        .code-ref {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            background: var(--code-bg);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            color: #0F172A;
+            display: block;
+            margin-top: 0.5rem;
+            font-size: 1rem; 
+            border: 1px solid var(--border);
+        }
+        .sub-node {
+            background: var(--bg);
+            border-left: 4px solid var(--primary-light);
+            padding: 1rem;
+            margin-top: 1rem;
+            border-radius: 0 8px 8px 0;
+        }
+        .sub-node ul {
+            padding-left: 1.5rem;
+            margin-top: 0.5rem;
+            margin-bottom: 0;
+        }
+        .sub-node li {
+            margin-bottom: 0.5rem;
+        }
+        .desc {
+            font-size: 1rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+            line-height: 1.5;
+        }
+        .empty-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            font-size: 1.25rem;
+            color: var(--text-muted);
+            text-align: center;
+        }
+        .struct-card {
+            background: var(--bg);
+            border: 2px solid var(--border);
+            border-left: 6px solid var(--primary);
+            border-radius: 8px;
+            padding: 1.5rem;
+            flex: 1 1 300px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);
+        }
+        .struct-card h3 {
+            margin-top: 0;
+            color: var(--primary);
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+        }
+        .struct-card .type {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+        .struct-card .desc {
+            font-size: 0.95rem;
+            margin-bottom: 1rem;
+            line-height: 1.4;
+        }
+        .struct-card pre {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            padding: 1rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            overflow-x: auto;
+            margin: 0;
+            color: var(--text-main);
+        }
+    </style>
+</head>
+<body>
+
+<div class="main-container">
+    <!-- Left Pane: Main Flow -->
+    <div class="pane left-pane">
+        <h2>主执行流程 (Main Execution Flow)</h2>
+        <div style="font-size: 1rem; color: var(--text-muted); margin-bottom: 1.5rem;">
+            <code>execute_on_formation(self, formation, context)</code>
+        </div>
+        <div id="main-graph" style="width: 100%; display: flex; flex-direction: column; align-items: center;">
+            <!-- Generated via JS -->
+        </div>
+    </div>
+
+    <!-- Right Pane: Recursive Details -->
+    <div class="pane right-pane" id="details-pane">
+        <h2 id="details-title">子流程详情 (Sub-process Details)</h2>
+        <div id="details-content">
+            <div class="empty-state">将鼠标悬停在左侧节点上以查看递归调用详情<br>(Hover over a node on the left to view recursive call details)</div>
+        </div>
+    </div>
+</div>
+
+<!-- Bottom Pane: Data Structures -->
+<div class="pane bottom-pane">
+    <h2>核心数据结构 (Core Data Structures)</h2>
+    <div style="display: flex; gap: 1.5rem; flex-wrap: wrap; padding-bottom: 1rem;">
+        
+        <div class="struct-card">
+            <h3>Storyboard</h3>
+            <div class="type">&lt;&lt;Property Group&gt;&gt;</div>
+            <div class="desc">Blender中管理无人机表演故事板的核心属性组，包含所有编队条目。</div>
+            <pre>
++ entries: CollectionProperty
++ last_formation: Collection
++ frame_start: int
++ frame_end: int
+----------------------------------------
++ add_new_entry(name, select, formation)</pre>
+        </div>
+
+        <div class="struct-card">
+            <h3>StoryboardEntry</h3>
+            <div class="type">&lt;&lt;Property Group&gt;&gt;</div>
+            <div class="desc">Blender属性组，表示无人机表演故事板中的单个条目。</div>
+            <pre>
++ formation: FormationProperty
++ frame_start: IntProperty
++ frame_end: IntProperty
++ duration: IntProperty
++ transition_type: EnumProperty
++ transition_schedule: EnumProperty
++ purpose: EnumProperty</pre>
+        </div>
+
+        <div class="struct-card">
+            <h3>Safety_Check / Settings</h3>
+            <div class="type">&lt;&lt;Property Group&gt;&gt;</div>
+            <div class="desc">安全检查及设置配置，提供速度和加速度限制，用于路径规划。</div>
+            <pre>
++ velocity_xy_warning_threshold: float
++ velocity_z_warning_threshold: float
++ velocity_z_warning_threshold_up_or_none: float
++ max_acceleration: float</pre>
+        </div>
+
+        <div class="struct-card">
+            <h3>Transition Planner API</h3>
+            <div class="type">External API</div>
+            <div class="desc">外部API客户端，用于计算无人机在两个编队之间的物理安全过渡路径。</div>
+            <pre>
++ plan: TransitionPlan
+----------------------------------------
++ plan_transition(source, target, **kwargs)</pre>
+        </div>
+
+        <div class="struct-card">
+            <h3>AppendFormationToStoryboardOperator</h3>
+            <div class="type">Blender Operator</div>
+            <div class="desc">将选定的编队追加到表演故事板的末尾，并计算相邻编队之间的过渡。</div>
+            <pre>
++ bl_idname: str
++ bl_label: str
+----------------------------------------
++ execute_on_formation(...)
++ poll(...)</pre>
+        </div>
+
+    </div>
+</div>
+
+    <script>
+        const graphData = [
+            {
+                id: 'validation',
+                label: 'Validation & Initialization',
+                desc: '验证编队有效性并获取场景配置 (Validate formation and retrieve scene settings)',
+                children: null
+            },
+            {
+                id: 'add_entry',
+                label: 'storyboard.add_new_entry()',
+                desc: '在故事板中创建新的编队条目 (Create a new formation entry in the storyboard)',
+                children: null
+            },
+            {
+                id: 'position_evaluator',
+                label: 'create_position_evaluator()',
+                desc: '上下文管理器：计算起始和目标坐标 (Context manager: Calculate source and target coordinates)',
+                children: [
+                    {
+                        label: 'Calculate Source Coordinates',
+                        desc: '获取无人机起始位置 (Get starting positions of drones)',
+                        subChildren: [
+                            'get_world_coordinates_of_markers_from_formation(last_formation, frame=last_frame)',
+                            'Collections.find_drones().objects (当没有上一个编队时)',
+                            'get_positions_of(drones, frame=last_frame)'
+                        ]
+                    },
+                    {
+                        label: 'Calculate Target Coordinates',
+                        desc: '获取无人机目标位置 (Get target positions of drones)',
+                        subChildren: [
+                            'get_world_coordinates_of_markers_from_formation(formation, frame=entry.frame_start)'
+                        ]
+                    }
+                ]
+            },
+            {
+                id: 'plan_transition',
+                label: 'api.plan_transition()',
+                desc: '调用外部API规划安全过渡路径 (Call external API to plan safe transition paths)',
+                children: [
+                    {
+                        label: 'call_api_from_blender_operator()',
+                        desc: '管理API连接的上下文 (Context manager for API connection)',
+                        subChildren: [
+                            'api.plan_transition(source, target, **safety_kwds)'
+                        ]
+                    }
+                ]
+            },
+            {
+                id: 'timeline_snapping',
+                label: 'Timeline Frame Snapping',
+                desc: '计算并对齐帧数到整秒边界 (Calculate and snap entry frames to whole seconds)',
+                children: [
+                    {
+                        label: 'Calculate New Start Frame',
+                        desc: '基于计划的持续时间和FPS计算新的起始帧 (Calculate based on plan duration and FPS)',
+                        subChildren: [
+                            'new_start = ceil(last_frame + plan.total_duration * fps)',
+                            'diff = ceil((new_start - storyboard.frame_start) / fps) * fps',
+                            'entry.frame_start = storyboard.frame_start + diff'
+                        ]
+                    }
+                ]
+            }
+        ];
+
+        const mainGraph = document.getElementById('main-graph');
+        const detailsPane = document.getElementById('details-pane');
+        const detailsTitle = document.getElementById('details-title');
+        const detailsContent = document.getElementById('details-content');
+
+        detailsPane.style.display = 'block';
+
+        graphData.forEach((node, index) => {
+            const el = document.createElement('div');
+            el.className = 'node' + (node.children ? ' has-children' : '');
+            el.innerHTML = `<strong>${node.label}</strong><div class="desc" style="font-size: 1rem;">${node.desc}</div>`;
+            
+            el.addEventListener('mouseenter', () => {
+                document.querySelectorAll('.node').forEach(n => n.classList.remove('active'));
+                el.classList.add('active');
+
+                if (node.children) {
+                    detailsTitle.innerText = `子流程详情 (Sub-process Details): ${node.label}`;
+                    
+                    let html = '<ul class="details-list">';
+                    node.children.forEach(child => {
+                        html += `<li>
+                            <strong>${child.label}</strong>
+                            <div class="desc">${child.desc}</div>`;
+                        
+                        if (child.subChildren) {
+                            html += `<div class="sub-node">
+                                <strong style="color: var(--primary); font-size: 1.125rem;">递归调用详情 (Recursive Calls):</strong>
+                                <ul>`;
+                            child.subChildren.forEach(sub => {
+                                html += `<li><span class="code-ref">${sub}</span></li>`;
+                            });
+                            html += `</ul></div>`;
+                        }
+                        html += `</li>`;
+                    });
+                    html += '</ul>';
+                    detailsContent.innerHTML = html;
+                } else {
+                    detailsTitle.innerText = `节点信息 (Node Info)`;
+                    detailsContent.innerHTML = `
+                        <div style="padding: 1.5rem; background: var(--hover-bg); border-radius: 8px; border: 2px solid var(--primary-light);">
+                            <strong style="font-size: 1.25rem; display: block; margin-bottom: 0.75rem;">${node.label}</strong>
+                            <div class="desc" style="font-size: 1rem;">${node.desc}</div>
+                            <div class="sub-node" style="margin-top: 1.5rem; font-size: 1rem;">
+                                此步骤为叶子节点，无深层复杂递归调用。<br>
+                                (Leaf node: No deep complex recursive calls for this step.)
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+
+            mainGraph.appendChild(el);
+
+            if (index < graphData.length - 1) {
+                const arrow = document.createElement('div');
+                arrow.className = 'arrow';
+                mainGraph.appendChild(arrow);
+            }
+        });
+    </script>
+</body>
+</html>

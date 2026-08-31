@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recalculate Transitions Process Graph</title>
+    <style>
+        :root {
+            --primary: #2563EB;
+            --primary-light: #DBEAFE;
+            --bg: #F8FAFC;
+            --card-bg: #FFFFFF;
+            --text-main: #1E293B;
+            --text-muted: #475569;
+            --border: #E2E8F0;
+            --hover-bg: #EFF6FF;
+            --code-bg: #F1F5F9;
+        }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            margin: 0;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            gap: 2rem;
+            font-size: 1rem;
+            min-height: 100vh;
+        }
+        .main-container {
+            display: flex;
+            gap: 2rem;
+            min-height: 800px; /* Force the original size */
+        }
+        .bottom-pane {
+            display: flex;
+            flex-direction: column;
+        }
+        h1, h2 {
+            color: var(--primary);
+            font-size: 1.5rem; 
+            margin-top: 0;
+            margin-bottom: 1.5rem;
+            border-bottom: 2px solid var(--primary-light);
+            padding-bottom: 0.5rem;
+        }
+        .pane {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+            flex: 1;
+            /* Remove overflow-y: auto to let the window scroll */
+        }
+        .left-pane {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .right-pane {
+            display: none; /* Interact to reveal */
+            border-left: 6px solid var(--primary);
+        }
+        .node {
+            background: var(--card-bg);
+            border: 2px solid var(--primary);
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            margin: 0.5rem 0;
+            width: 80%;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease-out;
+            font-size: 1.125rem; 
+            position: relative;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);
+        }
+        .node:hover, .node.active {
+            background: var(--hover-bg);
+            transform: translateX(8px) scale(1.01);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+        .node.has-children::after {
+            content: '▶';
+            position: absolute;
+            right: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--primary);
+            font-size: 1.25rem;
+        }
+        .node strong {
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+        .arrow {
+            width: 4px;
+            height: 30px;
+            background-color: var(--primary);
+            position: relative;
+        }
+        .arrow::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: -8px;
+            border-width: 10px 10px 0;
+            border-style: solid;
+            border-color: var(--primary) transparent transparent transparent;
+        }
+        .details-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .details-list > li {
+            font-size: 1.125rem;
+            padding: 1rem;
+            border-bottom: 1px dashed var(--border);
+            margin-bottom: 0.5rem;
+        }
+        .details-list > li:last-child {
+            border-bottom: none;
+        }
+        .code-ref {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            background: var(--code-bg);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            color: #0F172A;
+            display: block;
+            margin-top: 0.5rem;
+            font-size: 1rem; 
+            border: 1px solid var(--border);
+        }
+        .sub-node {
+            background: var(--bg);
+            border-left: 4px solid var(--primary-light);
+            padding: 1rem;
+            margin-top: 1rem;
+            border-radius: 0 8px 8px 0;
+        }
+        .sub-node ul {
+            padding-left: 1.5rem;
+            margin-top: 0.5rem;
+            margin-bottom: 0;
+        }
+        .sub-node li {
+            margin-bottom: 0.5rem;
+        }
+        .desc {
+            font-size: 1rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+            line-height: 1.5;
+        }
+        .empty-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            font-size: 1.25rem;
+            color: var(--text-muted);
+            text-align: center;
+        }
+        .takeaway {
+            background: #FFFBEB;
+            border: 2px solid #F59E0B;
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            margin: 0.5rem 0;
+            width: 80%;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease-out;
+            font-size: 1.125rem; 
+            position: relative;
+            box-shadow: 0 4px 6px -1px rgb(245 158 11 / 0.1);
+        }
+        .takeaway:hover, .takeaway.active {
+            background: #FEF3C7;
+            transform: translateX(8px) scale(1.01);
+            box-shadow: 0 10px 15px -3px rgb(245 158 11 / 0.2);
+        }
+        .takeaway strong {
+            display: block;
+            color: #D97706;
+        }
+        .takeaway-content {
+            font-size: 1rem;
+            line-height: 1.6;
+            color: var(--text-main);
+        }
+        .takeaway-content h4 {
+            color: #D97706;
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+        }
+        .takeaway-content p {
+            margin-top: 0;
+            margin-bottom: 1rem;
+        }
+        .takeaway-content ul {
+            padding-left: 1.5rem;
+            margin-top: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .takeaway-content li {
+            margin-bottom: 0.5rem;
+        }
+        .struct-card {
+            background: var(--bg);
+            border: 2px solid var(--border);
+            border-left: 6px solid var(--primary);
+            border-radius: 8px;
+            padding: 1.5rem;
+            flex: 1 1 300px; /* Allow cards to wrap naturally */
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);
+        }
+        .struct-card h3 {
+            margin-top: 0;
+            color: var(--primary);
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+        }
+        .struct-card .type {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+        .struct-card .desc {
+            font-size: 0.95rem;
+            margin-bottom: 1rem;
+            line-height: 1.4;
+        }
+        .struct-card pre {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            padding: 1rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            overflow-x: auto;
+            margin: 0;
+            color: var(--text-main);
+        }
+        .hint-container {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+        }
+        .hint-icon {
+            cursor: pointer;
+            background: var(--primary);
+            color: white;
+            border-radius: 50%;
+            width: 18px;
+            height: 18px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            margin-left: 8px;
+            font-family: monospace;
+            font-weight: bold;
+        }
+        .hint-tooltip {
+            visibility: hidden;
+            opacity: 0;
+            position: absolute;
+            z-index: 10;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 8px 12px;
+            width: 250px;
+            font-size: 0.9rem;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            white-space: normal;
+            line-height: 1.4;
+        }
+        .hint-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #333 transparent transparent transparent;
+        }
+        .hint-container:hover .hint-tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+        .rightmost-pane {
+            display: none;
+            border-left: 6px solid #10B981; /* distinct color */
+            flex: 1;
+        }
+        .rightmost-pane.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+<div class="main-container">
+    <!-- Left Pane: Main Flow -->
+    <div class="pane left-pane">
+        <h2>主执行流程 (Main Execution Flow)</h2>
+        <div style="font-size: 1rem; color: var(--text-muted); margin-bottom: 1.5rem;">
+            <code>execute_on_storyboard(self, storyboard, entries, context)</code>
+        </div>
+        
+        <div id="takeaway-node" class="takeaway">
+            <strong>💡 Takeaway</strong>
+        </div>
+        
+        <div id="main-graph" style="width: 100%; display: flex; flex-direction: column; align-items: center; margin-top: 1.5rem;">
+            <!-- Generated via JS -->
+        </div>
+    </div>
+
+    <!-- Right Pane: Recursive Details -->
+    <div class="pane right-pane" id="details-pane">
+        <h2 id="details-title">子流程详情 (Sub-process Details)</h2>
+        <div id="details-content">
+            <div class="empty-state">将鼠标悬停在左侧节点上以查看递归调用详情<br>(Hover over a node on the left to view recursive call details)</div>
+        </div>
+    </div>
+
+    <!-- Rightmost Pane: Deep Dive -->
+    <div class="pane rightmost-pane" id="rightmost-pane">
+        <h2 style="color: #10B981; border-bottom-color: #D1FAE5;">内部执行详情 (Internal Details)</h2>
+        <div id="rightmost-content">
+            <div style="padding: 1.5rem; background: var(--card-bg); border-radius: 8px; border: 2px solid #10B981; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);">
+                <strong style="font-size: 1.25rem; display: block; margin-bottom: 1rem; color: #047857;">update_transition_constraint_properties()</strong>
+                <ul class="details-list" style="margin-top: 1rem;">
+                    <li>
+                        <strong>find_transition_constraint_between()</strong>
+                        <div class="desc">查找当前无人机与故事板条目之间是否已有过渡约束。</div>
+                    </li>
+                    <li>
+                        <strong>检查目标标记 (Check Marker)</strong>
+                        <div class="desc">如果 <code>marker is None</code> (无目标)，则删除无人机上的过渡约束并返回 <code>None</code>。</div>
+                    </li>
+                    <li>
+                        <strong>创建或重命名约束</strong>
+                        <div class="desc">如果约束不存在，则通过 <code>create_transition_constraint_between()</code> 创建。<br>如果已存在，则调用 <code>set_constraint_name_from_storyboard_entry()</code> 同步最新名称。</div>
+                    </li>
+                    <li>
+                        <strong>设置约束目标 (Set Target)</strong>
+                        <div class="desc">
+                            <ul>
+                                <li style="margin-bottom: 0.5rem;">如果 marker 是一个独立对象 (<code>marker is obj</code>)，直接将约束的目标设置为该对象。</li>
+                                <li>如果 marker 是网格上的顶点，找到或创建只包含该顶点的顶点组 (<code>Vertex Group</code>)，然后将约束目标设为网格对象，子目标 (subtarget) 设为顶点组。</li>
+                            </ul>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bottom Pane: Data Structures -->
+<div class="pane bottom-pane">
+    <h2>核心数据结构 (Core Data Structures)</h2>
+    <div style="display: flex; gap: 1.5rem; flex-wrap: wrap; padding-bottom: 1rem;">
+        
+        <div class="struct-card">
+            <h3>ScheduleOverride</h3>
+            <div class="type">&lt;&lt;Property Group&gt;&gt;</div>
+            <div class="desc">表示无人机在转场起飞和到达时的延迟排期覆盖配置。</div>
+            <pre>
++ enabled: BoolProperty
++ index: IntProperty
++ pre_delay: IntProperty
++ post_delay: IntProperty
+----------------------------------------
++ label: property</pre>
+        </div>
+
+        <div class="struct-card">
+            <h3>Storyboard</h3>
+            <div class="type">&lt;&lt;Property Group&gt;&gt;</div>
+            <div class="desc">Blender中管理无人机表演故事板的核心属性组，包含所有编队条目。</div>
+            <pre>
++ entries: CollectionProperty
++ last_formation: Collection
++ frame_start: int
++ frame_end: int
+----------------------------------------
++ add_new_entry(name, select, formation)</pre>
+        </div>
+
+        <div class="struct-card">
+            <h3>StoryboardEntry</h3>
+            <div class="type">&lt;&lt;Property Group&gt;&gt;</div>
+            <div class="desc">Blender属性组，表示无人机表演故事板中的单个条目。</div>
+            <pre>
++ formation: FormationProperty
++ frame_start: IntProperty
++ frame_end: IntProperty
++ duration: IntProperty
++ transition_type: EnumProperty
++ transition_schedule: EnumProperty
++ purpose: EnumProperty</pre>
+        </div>
+
+        <div class="struct-card">
+            <h3>RecalculationTask</h3>
+            <div class="type">&lt;&lt;Dataclass&gt;&gt;</div>
+            <div class="desc">用于描述单一过渡重新计算任务的数据类，包含当前条目及相邻条目信息。</div>
+            <pre>
++ entry: StoryboardEntry
++ entry_index: int
++ previous_entry: StoryboardEntry | None
++ start_frame_of_next_entry: int | None
+----------------------------------------
++ for_entry_by_index(entries, index)</pre>
+        </div>
+
+        <div class="struct-card">
+            <h3>InfluenceCurveDescriptor</h3>
+            <div class="type">&lt;&lt;Dataclass&gt;&gt;</div>
+            <div class="desc">描述约束的影响曲线应如何呈现，定义了起始帧、预备帧和结束帧等关键点。</div>
+            <pre>
++ scene_start_frame: int
++ windup_start_frame: int | None
++ start_frame: int
++ end_frame: int | None
++ windup_type: InfluenceCurveTransitionType
+----------------------------------------
++ apply(object, data_path: str): None</pre>
+        </div>
+
+        <div class="struct-card">
+            <h3>InfluenceCurveTransitionType</h3>
+            <div class="type">&lt;&lt;Enum&gt;&gt;</div>
+            <div class="desc">影响曲线的过渡类型枚举。</div>
+            <pre>
+LINEAR
+SMOOTH_FROM_LEFT
+SMOOTH_FROM_RIGHT
+SMOOTH
+----------------------------------------
++ from_enum_property(value: str)</pre>
+        </div>
+
+        <div class="struct-card">
+            <h3>_LazyFormationTargetList</h3>
+            <div class="type">Helper Class</div>
+            <div class="desc">延迟查找对象在编队中的索引位置，并在找不到时提供默认值。</div>
+            <pre>
+- _formation: Collection | None
+- _items: list[Object | MeshVertex] | None
+----------------------------------------
++ find(item, default: int): int
+- _validate_items(): list</pre>
+        </div>
+
+        <div class="struct-card">
+            <h3>RecalculateTransitionsOperator</h3>
+            <div class="type">Blender Operator</div>
+            <div class="desc">根据当前故事板重新计算表演中所有的无人机过渡约束，可设置作用域。</div>
+            <pre>
++ bl_idname: str
++ bl_options: set
++ scope: EnumProperty
+----------------------------------------
++ execute_on_storyboard(...)
++ _get_transitions_to_process(...)</pre>
+        </div>
+
+    </div>
+</div>
+
+    <script>
+        const graphData = [
+            {
+                id: 'find_drones',
+                label: 'Collections.find_drones()',
+                desc: '获取场景中所有的无人机对象 (Retrieve all drone objects in the scene)',
+                children: null
+            },
+            {
+                id: 'get_transitions',
+                label: '_get_transitions_to_process()',
+                desc: '根据当前操作范围生成重新计算任务列表 (Generate RecalculationTasks based on the operator scope)',
+                children: [
+                    {
+                        label: 'Determine Scope Condition',
+                        desc: '根据操作员设定的作用域确定过滤条件 (Determine condition based on operator scope)',
+                        subTitle: '分支调用详情:',
+                        subChildren: [
+                            'FROM_SELECTED: 仅重新计算选中项的下一个过渡 (Next transition)',
+                            'TO_SELECTED: 仅重新计算到达选中项的过渡 (Transition to active)',
+                            'FROM_SELECTED_TO_END: 从当前选中项开始到结尾的所有过渡',
+                            'CURRENT_FRAME: 根据当前帧查找下一个条目并计算其过渡',
+                            'ALL: 重新计算故事板中所有的过渡 (All transitions)'
+                        ]
+                    },
+                    {
+                        label: 'Generate RecalculationTasks',
+                        desc: '遍历所有条目并对符合条件的条目生成任务 (Iterate entries and generate tasks for matching ones)',
+                        subTitle: '循环调用详情:',
+                        subChildren: [
+                            'for index in range(len(entries)):',
+                            '    if condition(index):',
+                            '        tasks.append(RecalculationTask.for_entry_by_index(entries, index))'
+                        ]
+                    }
+                ]
+            },
+            {
+                id: 'recalculate_transitions',
+                label: 'recalculate_transitions()',
+                desc: '核心迭代：执行转场路径的重新计算 (Core Iteration: Execute recalculation of transitions)',
+                children: [
+                    {
+                        label: 'create_position_evaluator()',
+                        desc: '上下文管理器：评估位置的上下文包装 (Context manager for position evaluation)<br>允许用户评估任意 Blender 对象（可多个对象）在任意给定帧下的位置',
+                        subTitle: '上下文详情 (Context):',
+                        subChildren: [
+                            'with create_position_evaluator() as get_positions_of:'
+                        ]
+                    },
+                    {
+                        label: 'update_transition_for_storyboard_entry()',
+                        desc: '处理单个任务的转场逻辑 (Process transition logic for a single storyboard entry)',
+                        subTitle: '循环调用详情:',
+                        subChildren: [
+                            'get_markers_and_related_objects_from_formation()',
+                            'get_positions_of(drones)',
+                            '<div class="hint-container">calculate_mapping_for_transition_into_storyboard_entry() ➔ 内部调用 get_api().match_points() 进行路径匹配 <span class="hint-icon" title="Hover for details">?</span><div class="hint-tooltip" style="width: 400px; text-align: left;"><ul style="margin: 0; padding-left: 1.2rem;"><li>When there are more target points (markers in the formation) than source points (drones available in the scene), some targets is left unmatched.</li><li style="margin-top: 0.5rem;">a list where the i-th element contains the index of the target point that the i-th drone was matched to, or ``None`` if the drone was left unmatched</li></ul></div></div>',
+                            'entry.get_enabled_schedule_override_map() ➔ 获取排期覆盖映射 (Get schedule override map)',
+                            '<span class="interactive-step" id="step-update-constraint" style="cursor: pointer; color: var(--primary); text-decoration: underline;">update_transition_constraint_properties() ➔ 配置目标约束</span>',
+                            'calculate_departure_index_of_drone() ➔ 计算交错起飞/延时参数',
+                            'update_transition_constraint_influence() ➔ 提交F-Curves影响曲线'
+                        ]
+                    },
+                    {
+                        label: 'cleanup_actions_for_object(drone)',
+                        desc: '清理无效的关键帧动作 (Cleanup F-curves and redundant actions)',
+                        subChildren: null
+                    },
+                    {
+                        label: 'bpy.ops.skybrush.fix_constraint_ordering()',
+                        desc: '修正约束顺序 (Fix constraint order in Blender)',
+                        subChildren: null
+                    },
+                    {
+                        label: 'invalidate_caches(clear_result=True)',
+                        desc: '清理缓存以强制刷新视图 (Clear caches to force viewport refresh)',
+                        subChildren: null
+                    }
+                ]
+            },
+            {
+                id: 'update_time_markers',
+                label: 'update_time_markers_from_storyboard()',
+                desc: '同步UI时间轴标记 (Sync UI timeline markers)',
+                children: null
+            }
+        ];
+
+        const mainGraph = document.getElementById('main-graph');
+        const detailsPane = document.getElementById('details-pane');
+        const detailsTitle = document.getElementById('details-title');
+        const detailsContent = document.getElementById('details-content');
+
+        // Initially show right pane with empty state
+        detailsPane.style.display = 'block';
+
+        // Add takeaway interaction
+        const takeawayNode = document.getElementById('takeaway-node');
+        takeawayNode.addEventListener('mouseenter', () => {
+            document.querySelectorAll('.node').forEach(n => n.classList.remove('active'));
+            takeawayNode.classList.add('active');
+            
+            // Hide rightmost pane when hovering over takeaway
+            const rightmostPane = document.getElementById('rightmost-pane');
+            if (rightmostPane) {
+                rightmostPane.classList.remove('active');
+            }
+            
+            detailsTitle.innerText = `💡 核心理解 (Key Takeaway)`;
+            detailsContent.innerHTML = `
+                <div class="takeaway-content" style="padding: 1.5rem; background: #FFFBEB; border-radius: 8px; border: 2px solid #FCD34D;">
+                    <strong style="font-size: 1.25rem; display: block; margin-bottom: 1rem; color: #D97706;">第848行：context.scene.frame_start 与 storyboard.frame_start 的关系</strong>
+                    
+                    <details>
+                        <summary style="color: #D97706; margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 1.1rem; font-weight: bold; cursor: pointer;">1. 这两个变量分别代表什么？</summary>
+                        <ul>
+                            <li><code>context.scene.frame_start</code>: 这是 Blender 场景自身的属性，代表整个动画时间轴的起始帧（用户可以在 Blender 的输出设置里手动修改这个值）。</li>
+                            <li><code>storyboard.frame_start</code>: 这是 Skybrush 故事板插件自己维护的属性，代表“无人机表演故事板”的第一场编队实际发生在哪一帧。</li>
+                        </ul>
+                    </details>
+
+                    <details>
+                        <summary style="color: #D97706; margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 1.1rem; font-weight: bold; cursor: pointer;">2. 为什么会有大小关系的变化？</summary>
+                        <p>在理想情况下，这两者通常是相等的（比如都在第 0 帧或第 1 帧），或者 <code>scene.frame_start</code> 小于 <code>storyboard.frame_start</code>（代表在表演开始前有一段等待时间）。</p>
+                        <p>但是，由于用户在 Blender 中的自由度很高，可能会出现以下情况：</p>
+                        <ul>
+                            <li><strong>情况 A:</strong> 用户把 Blender 的全局起始帧设为了 0，但在故事板里，第一场编队被拖到了第 100 帧才开始。此时 <code>scene.frame_start &lt; storyboard.frame_start</code>。</li>
+                            <li><strong>情况 B:</strong> 故事板的第一场编队从第 0 帧开始，但用户后来去 Blender 界面里把全局起始帧改成了第 50 帧（可能是为了临时渲染后半段）。此时 <code>scene.frame_start &gt; storyboard.frame_start</code>。</li>
+                        </ul>
+                    </details>
+
+                    <details>
+                        <summary style="color: #D97706; margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 1.1rem; font-weight: bold; cursor: pointer;">3. 为什么使用 <code>min()</code> 函数？</summary>
+                        <p>对于重新计算过渡 (recalculate_transitions) 来说，系统必须找到一个<strong>绝对安全、包含所有关键帧的“绝对起点”</strong>。</p>
+                        <p>如果系统只使用 <code>storyboard.frame_start</code>，在“情况 B”下，从 0 帧到 50 帧的动画数据可能会被截断或忽略。</p>
+                        <p>通过取两者的最小值 <code>min(context.scene.frame_start, storyboard.frame_start)</code>，代码确保了：<strong>无论用户怎么乱改全局时间轴，或者怎么拖动故事板，系统都会从“最靠前的那一帧”开始计算和清理约束，保证任何动画关键帧都不会被遗漏。</strong></p>
+                    </details>
+                </div>
+            `;
+        });
+
+        graphData.forEach((node, index) => {
+            // Create Node Element
+            const el = document.createElement('div');
+            el.className = 'node' + (node.children ? ' has-children' : '');
+            el.innerHTML = `<strong>${node.label}</strong><div class="desc" style="font-size: 1rem;">${node.desc}</div>`;
+            
+            // Add Interaction (Hover)
+            el.addEventListener('mouseenter', () => {
+                // Remove active class from all nodes and takeaway
+                document.querySelectorAll('.node, .takeaway').forEach(n => n.classList.remove('active'));
+                el.classList.add('active');
+                
+                // Hide rightmost pane when hovering over a new node
+                const rightmostPane = document.getElementById('rightmost-pane');
+                if (rightmostPane) {
+                    rightmostPane.classList.remove('active');
+                }
+
+                if (node.children) {
+                    detailsTitle.innerText = `子流程详情 (Sub-process Details): ${node.label}`;
+                    
+                    let html = '<ul class="details-list">';
+                    node.children.forEach(child => {
+                        html += `<li>
+                            <strong>${child.label}</strong>
+                            <div class="desc">${child.desc}</div>`;
+                        
+                        if (child.subChildren) {
+                            html += `<div class="sub-node">
+                                <strong style="color: var(--primary); font-size: 1.125rem;">${child.subTitle || '递归调用详情 (Recursive Calls):'}</strong>
+                                <ul>`;
+                            child.subChildren.forEach(sub => {
+                                html += `<li><span class="code-ref">${sub}</span></li>`;
+                            });
+                            html += `</ul></div>`;
+                        }
+                        html += `</li>`;
+                    });
+                    html += '</ul>';
+                    detailsContent.innerHTML = html;
+                    
+                    // Attach event listener for the newly injected interactive step
+                    const stepUpdateConstraint = document.getElementById('step-update-constraint');
+                    if (stepUpdateConstraint) {
+                        stepUpdateConstraint.addEventListener('click', () => {
+                            const rightmostPane = document.getElementById('rightmost-pane');
+                            rightmostPane.classList.toggle('active');
+                        });
+                    }
+                } else {
+                    detailsTitle.innerText = `节点信息 (Node Info)`;
+                    detailsContent.innerHTML = `
+                        <div style="padding: 1.5rem; background: var(--hover-bg); border-radius: 8px; border: 2px solid var(--primary-light);">
+                            <strong style="font-size: 1.25rem; display: block; margin-bottom: 0.75rem;">${node.label}</strong>
+                            <div class="desc" style="font-size: 1rem;">${node.desc}</div>
+                            <div class="sub-node" style="margin-top: 1.5rem; font-size: 1rem;">
+                                此步骤为叶子节点，无深层复杂递归调用。<br>
+                                (Leaf node: No deep complex recursive calls for this step.)
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+
+            mainGraph.appendChild(el);
+
+            // Create Connecting Arrow if it's not the last node
+            if (index < graphData.length - 1) {
+                const arrow = document.createElement('div');
+                arrow.className = 'arrow';
+                mainGraph.appendChild(arrow);
+            }
+        });
+    </script>
+</body>
+</html>
