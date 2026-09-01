@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transition Architecture & Mapping</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for clean interact-to-reveal components */
+        details > summary {
+            list-style: none;
+        }
+        details > summary::-webkit-details-marker {
+            display: none;
+        }
+        details[open] summary ~ * {
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .drone-circle {
+            transition: all 0.3s ease;
+        }
+        .drone-circle:hover {
+            r: 12;
+            fill: #3b82f6;
+        }
+        .path-line {
+            stroke-dasharray: 10;
+            animation: dash 3s linear infinite;
+        }
+        @keyframes dash {
+            to { stroke-dashoffset: -20; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans p-8 md:p-16 relative">
+
+    <a href="recalculate_transitions_graph.html" class="absolute top-8 left-8 md:top-16 md:left-16 bg-white border-2 border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 px-4 py-2 rounded-xl shadow-sm font-semibold transition-all flex items-center gap-2 z-10">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+        Back to Graph
+    </a>
+
+    <div class="max-w-[95%] mx-auto bg-white p-12 rounded-3xl shadow-2xl mt-12 md:mt-0">
+        
+        <header class="mb-12 border-b pb-8">
+            <h1 class="text-5xl font-extrabold text-gray-800 tracking-tight">Formation Transition Architecture</h1>
+            <p class="text-3xl text-gray-500 mt-4">Visualizing the mapping and core data structures for drone formation transitions.</p>
+        </header>
+
+        <!-- SVG Visualization Section -->
+        <section class="mb-16">
+            <h2 class="text-4xl font-bold text-gray-700 mb-8">Transition Mapping (5 Drones → 4 Targets)</h2>
+            <div class="w-full bg-slate-50 rounded-2xl border-2 border-slate-200 p-8 overflow-hidden shadow-inner flex justify-center">
+                <svg width="800" height="500" viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg" class="max-w-full h-auto">
+                    <!-- Definitions -->
+                    <defs>
+                        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                            <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
+                        </marker>
+                    </defs>
+
+                    <!-- Background Grids / Context -->
+                    <rect x="0" y="0" width="800" height="500" fill="transparent" />
+
+                    <!-- Labels -->
+                    <text x="150" y="50" class="text-2xl font-bold fill-slate-500" text-anchor="middle">Source Formation</text>
+                    <text x="650" y="50" class="text-2xl font-bold fill-slate-500" text-anchor="middle">Target Formation</text>
+
+                    <!-- Mapping Paths (Dashed lines with arrows) -->
+                    <!-- Drone 1 to Target 1 -->
+                    <line x1="150" y1="100" x2="630" y2="150" stroke="#94a3b8" stroke-width="3" class="path-line" marker-end="url(#arrowhead)"/>
+                    <!-- Drone 2 to Target 2 -->
+                    <line x1="150" y1="180" x2="630" y2="230" stroke="#94a3b8" stroke-width="3" class="path-line" marker-end="url(#arrowhead)"/>
+                    <!-- Drone 3 to Target 3 -->
+                    <line x1="150" y1="260" x2="630" y2="310" stroke="#94a3b8" stroke-width="3" class="path-line" marker-end="url(#arrowhead)"/>
+                    <!-- Drone 4 to Target 4 -->
+                    <line x1="150" y1="340" x2="630" y2="390" stroke="#94a3b8" stroke-width="3" class="path-line" marker-end="url(#arrowhead)"/>
+                    <!-- Drone 5 (Unmapped / Stays or moves away) -->
+                    <path d="M 150 420 Q 250 420 300 470" stroke="#ef4444" stroke-width="3" class="path-line" stroke-dasharray="8" fill="none" opacity="0.6"/>
+
+                    <!-- Source Drones (Small Circles) -->
+                    <g fill="#64748b" stroke="#fff" stroke-width="2">
+                        <circle cx="150" cy="100" r="8" class="drone-circle" />
+                        <circle cx="150" cy="180" r="8" class="drone-circle" />
+                        <circle cx="150" cy="260" r="8" class="drone-circle" />
+                        <circle cx="150" cy="340" r="8" class="drone-circle" />
+                        <circle cx="150" cy="420" r="8" class="drone-circle" />
+                    </g>
+                    
+                    <g fill="#475569" font-size="14" font-weight="bold">
+                        <text x="110" y="105">D1</text>
+                        <text x="110" y="185">D2</text>
+                        <text x="110" y="265">D3</text>
+                        <text x="110" y="345">D4</text>
+                        <text x="110" y="425">D5</text>
+                    </g>
+
+                    <!-- Target Positions (Crossmarks) -->
+                    <g stroke="#10b981" stroke-width="4" stroke-linecap="round">
+                        <!-- Target 1 -->
+                        <path d="M 640 140 L 660 160 M 660 140 L 640 160" />
+                        <!-- Target 2 -->
+                        <path d="M 640 220 L 660 240 M 660 220 L 640 240" />
+                        <!-- Target 3 -->
+                        <path d="M 640 300 L 660 320 M 660 300 L 640 320" />
+                        <!-- Target 4 -->
+                        <path d="M 640 380 L 660 400 M 660 380 L 640 400" />
+                    </g>
+
+                    <g fill="#059669" font-size="14" font-weight="bold">
+                        <text x="680" y="155">T1</text>
+                        <text x="680" y="235">T2</text>
+                        <text x="680" y="315">T3</text>
+                        <text x="680" y="395">T4</text>
+                    </g>
+                </svg>
+            </div>
+        </section>
+
+        <!-- Core Data Structures Section -->
+        <section>
+            <h2 class="text-4xl font-bold text-gray-700 mb-8">Core Data Structures</h2>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                
+                <!-- start_points -->
+                <details class="bg-blue-50 hover:bg-blue-100 transition-colors p-8 rounded-2xl cursor-pointer group shadow-md border border-blue-100" open>
+                    <summary class="text-3xl font-semibold text-blue-900 flex items-center justify-between">
+                        <span><span class="text-blue-500 mr-2">#</span> start_points</span>
+                        <svg class="w-8 h-8 text-blue-500 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </summary>
+                    <div class="mt-6 pt-6 border-t border-blue-200 text-2xl text-gray-700 space-y-4 leading-relaxed">
+                        <p>Evaluated from <code class="bg-white px-3 py-1 rounded-lg text-blue-600 shadow-sm border border-blue-100">[object.matrix_world.translation for obj in objects]</code> at the end frame of the <code>previous_entry</code>.</p>
+                        <p class="text-xl text-gray-600">Represents the 5 source positions of the drones before the transition begins.</p>
+                    </div>
+                </details>
+
+                <!-- markers_and_objects -->
+                <details class="bg-emerald-50 hover:bg-emerald-100 transition-colors p-8 rounded-2xl cursor-pointer group shadow-md border border-emerald-100">
+                    <summary class="text-3xl font-semibold text-emerald-900 flex items-center justify-between">
+                        <span><span class="text-emerald-500 mr-2">#</span> markers_and_objects</span>
+                        <svg class="w-8 h-8 text-emerald-500 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </summary>
+                    <div class="mt-6 pt-6 border-t border-emerald-200 text-2xl text-gray-700 space-y-4 leading-relaxed">
+                        <p>Returned from <code class="bg-white px-3 py-1 rounded-lg text-emerald-600 shadow-sm border border-emerald-100">get_markers_and_related_objects_from_formation(formation)</code>.</p>
+                        <p class="text-xl text-gray-600">Indicates the 4 target points (crossmarks) required by the target formation.</p>
+                    </div>
+                </details>
+
+                <!-- Mapping -->
+                <details class="bg-purple-50 hover:bg-purple-100 transition-colors p-8 rounded-2xl cursor-pointer group shadow-md border border-purple-100">
+                    <summary class="text-3xl font-semibold text-purple-900 flex items-center justify-between">
+                        <span><span class="text-purple-500 mr-2">#</span> Mapping</span>
+                        <svg class="w-8 h-8 text-purple-500 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </summary>
+                    <div class="mt-6 pt-6 border-t border-purple-200 text-2xl text-gray-700 space-y-4 leading-relaxed">
+                        <p>Returned from <code class="bg-white px-3 py-1 rounded-lg text-purple-600 shadow-sm border border-purple-100">calculate_mapping_for_transition_into_storyboard_entry</code>.</p>
+                        <p class="text-xl text-gray-600">Dictates which start point transitions to which target point, handling cases with unequal entity counts (e.g., matching 5 drones to 4 targets gracefully).</p>
+                    </div>
+                </details>
+
+                <!-- CopyLocationConstraint & InfluenceCurveDescriptor -->
+                <details class="bg-amber-50 hover:bg-amber-100 transition-colors p-8 rounded-2xl cursor-pointer group shadow-md border border-amber-100">
+                    <summary class="text-3xl font-semibold text-amber-900 flex items-center justify-between">
+                        <span><span class="text-amber-500 mr-2">#</span> Constraints & Curves</span>
+                        <svg class="w-8 h-8 text-amber-500 transform group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </summary>
+                    <div class="mt-6 pt-6 border-t border-amber-200 text-2xl text-gray-700 space-y-6 leading-relaxed">
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-amber-100">
+                            <h4 class="font-bold text-amber-800 mb-2">CopyLocationConstraint</h4>
+                            <p class="text-xl text-gray-600 mb-3">Applies the calculated target movement translation securely to the drone objects within Blender space.</p>
+                            <div class="text-lg bg-gray-50 p-4 rounded-lg border border-gray-100 font-mono">
+                                <ul class="list-disc list-inside pl-2 space-y-1 text-gray-700">
+                                    <li><span class="text-pink-600 font-semibold">target</span>: Object</li>
+                                    <li><span class="text-pink-600 font-semibold">subtarget</span>: str</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-amber-100">
+                            <h4 class="font-bold text-amber-800 mb-2">InfluenceCurveDescriptor</h4>
+                            <p class="text-xl text-gray-600 mb-3">Defines the interpolation and easing curves, dictating the fluid acceleration and deceleration of the drones over the transition timeline.</p>
+                            <div class="text-lg bg-gray-50 p-4 rounded-lg border border-gray-100 font-mono">
+                                <ul class="list-disc list-inside pl-2 space-y-1 text-gray-700">
+                                    <li><span class="text-pink-600 font-semibold">scene_start_frame</span>: int</li>
+                                    <li><span class="text-pink-600 font-semibold">windup_start_frame</span>: int | None <span class="text-gray-500 font-sans ml-2"># drone departure frame</span></li>
+                                    <li><span class="text-pink-600 font-semibold">start_frame</span>: int <span class="text-gray-500 font-sans ml-2"># drone arrival frame</span></li>
+                                    <li><span class="text-pink-600 font-semibold">end_frame</span>: int | None <span class="text-gray-500 font-sans ml-2"># start frame of the next entry</span></li>
+                                    <li><span class="text-pink-600 font-semibold">windup_type</span>: InfluenceCurveTransitionType
+                                        <ul class="list-none pl-6 mt-2 text-gray-500 text-lg space-y-1 font-sans">
+                                            <li># LINEAR</li>
+                                            <li># SMOOTH_FROM_LEFT</li>
+                                            <li># SMOOTH_FROM_RIGHT</li>
+                                            <li># SMOOTH</li>
+                                        </ul>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+            </div>
+        </section>
+
+    </div>
+
+</body>
+</html>

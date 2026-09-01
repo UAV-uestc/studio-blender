@@ -52,6 +52,7 @@
             padding: 1.5rem;
             box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
             flex: 1;
+            position: relative;
             /* Remove overflow-y: auto to let the window scroll */
         }
         .left-pane {
@@ -312,6 +313,14 @@
         .rightmost-pane.active {
             display: block;
         }
+        .far-rightmost-pane {
+            display: none;
+            border-left: 6px solid #8B5CF6; /* distinct color */
+            flex: 1;
+        }
+        .far-rightmost-pane.active {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -335,7 +344,10 @@
 
     <!-- Right Pane: Recursive Details -->
     <div class="pane right-pane" id="details-pane">
-        <h2 id="details-title">子流程详情 (Sub-process Details)</h2>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid var(--primary-light); margin-bottom: 1.5rem; padding-bottom: 0.5rem;">
+            <h2 id="details-title" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0;">子流程详情 (Sub-process Details)</h2>
+            <a id="switch-btn" href="transition.html" style="display: none; background: var(--primary); color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 0.9rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: background 0.2s; white-space: nowrap; margin-left: 1rem;">View Transition Architecture ➔</a>
+        </div>
         <div id="details-content">
             <div class="empty-state">将鼠标悬停在左侧节点上以查看递归调用详情<br>(Hover over a node on the left to view recursive call details)</div>
         </div>
@@ -345,7 +357,7 @@
     <div class="pane rightmost-pane" id="rightmost-pane">
         <h2 style="color: #10B981; border-bottom-color: #D1FAE5;">内部执行详情 (Internal Details)</h2>
         <div id="rightmost-content">
-            <div style="padding: 1.5rem; background: var(--card-bg); border-radius: 8px; border: 2px solid #10B981; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);">
+            <div id="info-update-constraint" style="display: none; padding: 1.5rem; background: var(--card-bg); border-radius: 8px; border: 2px solid #10B981; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);">
                 <strong style="font-size: 1.25rem; display: block; margin-bottom: 1rem; color: #047857;">update_transition_constraint_properties()</strong>
                 <ul class="details-list" style="margin-top: 1rem;">
                     <li>
@@ -368,6 +380,90 @@
                                 <li>如果 marker 是网格上的顶点，找到或创建只包含该顶点的顶点组 (<code>Vertex Group</code>)，然后将约束目标设为网格对象，子目标 (subtarget) 设为顶点组。</li>
                             </ul>
                         </div>
+                    </li>
+                </ul>
+            </div>
+
+            <div id="info-calc-departure" style="display: none; padding: 1.5rem; background: var(--card-bg); border-radius: 8px; border: 2px solid #10B981; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);">
+                <strong style="font-size: 1.25rem; display: block; margin-bottom: 1rem; color: #047857;">calculate_departure_index_of_drone()</strong>
+                <ul class="details-list" style="margin-top: 1rem;">
+                    <li>
+                        <strong>快速通道 (Fast Path)</strong>
+                        <div class="desc">如果提供了 <code>previous_mapping</code>，直接从映射中查找无人机在上一编队中的目标索引，若不存在则返回 <code>0</code>。</div>
+                    </li>
+                    <li>
+                        <strong>初始编队处理 (First Formation)</strong>
+                        <div class="desc">如果没有 <code>previous_entry</code>，表示这是第一场编队，无人机从地面起飞，直接返回其全局 <code>drone_index</code>。</div>
+                    </li>
+                    <li>
+                        <strong>查找上一过渡约束 (Find Previous Constraint)</strong>
+                        <div class="desc">调用 <code>find_transition_constraint_between()</code> 获取无人机绑定到上一编队的约束。若无约束，则安全降级。</div>
+                    </li>
+                    <li>
+                        <strong>处理目标类型 (Handle Target Type)</strong>
+                        <div class="desc">
+                            <ul>
+                                <li style="margin-bottom: 0.5rem;">如果是顶点组 (Vertex Group)，通过名称提示或遍历网格中的顶点，找到约束绑定到的具体顶点。</li>
+                                <li>如果是独立对象 (Object)，直接获取该对象作为目标。</li>
+                            </ul>
+                        </div>
+                    </li>
+                    <li>
+                        <strong>返回最终起飞索引 (Return Departure Index)</strong>
+                        <div class="desc">在上一编队的所有目标列表中查找上述确定目标的具体位置，将其作为无人机的交错起飞索引。</div>
+                    </li>
+                </ul>
+            </div>
+
+            <div id="info-update-influence" style="display: none; padding: 1.5rem; background: var(--card-bg); border-radius: 8px; border: 2px solid #10B981; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);">
+                <strong style="font-size: 1.25rem; display: block; margin-bottom: 1rem; color: #047857;">update_transition_constraint_influence()</strong>
+                <ul class="details-list" style="margin-top: 1rem;">
+                    <li>
+                        <strong>构造数据路径 (Construct Data Path)</strong>
+                        <div class="desc">根据约束名称构造目标数据路径，例如 <code>constraints["Transition"].influence</code>。</div>
+                    </li>
+                    <li>
+                        <strong>确保动画数据存在 (Ensure Animation Data Exists)</strong>
+                        <div class="desc">调用 <code>ensure_animation_data_exists_for_object(drone)</code> 为无人机对象创建或获取 <code>AnimData</code> 及其对应的动作 (Action)，以支持关键帧插入。</div>
+                    </li>
+                    <li>
+                        <strong>应用影响曲线 (Apply Influence Curve)</strong>
+                        <div class="desc">调用 <code>descriptor.apply(drone, key)</code> 将影响曲线应用于数据路径。内部处理包括：
+                            <ul>
+                                <li style="margin-bottom: 0.5rem;"><strong>初始帧与预备阶段 (Windup)：</strong> 确认场景起始帧的影响值为 0 (首场过渡则为 1.0 以防跳动)，并保持该值直至 <code>windup_start_frame</code>。</li>
+                                <li style="margin-bottom: 0.5rem;"><strong>过渡阶段 (Transition)：</strong> 在 <code>start_frame</code> 插入关键帧，将影响权重爬升至 1.0。</li>
+                                <li><strong>结束状态 (End)：</strong> 如果定义了 <code>end_frame</code>，在其位置再插入 1.0 的关键帧以维持约束状态，等待被后续过渡覆盖。</li>
+                                <li style="margin-top: 0.5rem;"><span class="interactive-step" id="step-set-keyframes" style="cursor: pointer; color: #8B5CF6; text-decoration: underline;"><strong>写入关键帧 (Write Keyframes)：</strong> 调用 <code>set_keyframes()</code> 提交最终影响曲线</span></li>
+                            </ul>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Far Rightmost Pane: Deep Dive into set_keyframes -->
+    <div class="pane far-rightmost-pane" id="far-rightmost-pane">
+        <h2 style="color: #8B5CF6; border-bottom-color: #EDE9FE;">关键帧写入详情 (Keyframes Writing)</h2>
+        <div id="far-rightmost-content">
+            <div id="info-set-keyframes" style="display: block; padding: 1.5rem; background: var(--card-bg); border-radius: 8px; border: 2px solid #8B5CF6; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);">
+                <strong style="font-size: 1.25rem; display: block; margin-bottom: 1rem; color: #6D28D9;">set_keyframes()</strong>
+                <ul class="details-list" style="margin-top: 1rem;">
+                    <li>
+                        <strong>解析目标路径 (Resolve Target Path)</strong>
+                        <div class="desc">根据传入的 <code>data_path</code>（例如 <code>constraints["Transition"].influence</code>），通过 <code>object.path_resolve()</code> 找到目标属性和具体的属性名。</div>
+                    </li>
+                    <li>
+                        <strong>清理旧关键帧 (Clear Range)</strong>
+                        <div class="desc">如果指定了 <code>clear_range</code>，则调用 <code>clear_keyframes()</code> 删除该时间段内已有的旧关键帧，避免冲突。</div>
+                    </li>
+                    <li>
+                        <strong>插入新关键帧 (Insert Keyframes)</strong>
+                        <div class="desc">遍历 <code>values</code> 列表，通过 <code>target.keyframe_insert(prop, frame=frame)</code> 为每一帧写入影响权重（如 0.0 或 1.0）。</div>
+                    </li>
+                    <li>
+                        <strong>更新 F-Curve (Update F-Curve)</strong>
+                        <div class="desc">查找新生成的 F-Curve，并在必要时设置插值模式 (Interpolation)，确保过渡平滑。</div>
                     </li>
                 </ul>
             </div>
@@ -548,8 +644,8 @@ SMOOTH
                             '<div class="hint-container">calculate_mapping_for_transition_into_storyboard_entry() ➔ 内部调用 get_api().match_points() 进行路径匹配 <span class="hint-icon" title="Hover for details">?</span><div class="hint-tooltip" style="width: 400px; text-align: left;"><ul style="margin: 0; padding-left: 1.2rem;"><li>When there are more target points (markers in the formation) than source points (drones available in the scene), some targets is left unmatched.</li><li style="margin-top: 0.5rem;">a list where the i-th element contains the index of the target point that the i-th drone was matched to, or ``None`` if the drone was left unmatched</li></ul></div></div>',
                             'entry.get_enabled_schedule_override_map() ➔ 获取排期覆盖映射 (Get schedule override map)',
                             '<span class="interactive-step" id="step-update-constraint" style="cursor: pointer; color: var(--primary); text-decoration: underline;">update_transition_constraint_properties() ➔ 配置目标约束</span>',
-                            'calculate_departure_index_of_drone() ➔ 计算交错起飞/延时参数',
-                            'update_transition_constraint_influence() ➔ 提交F-Curves影响曲线'
+                            '<span class="interactive-step" id="step-calc-departure" style="cursor: pointer; color: var(--primary); text-decoration: underline;">calculate_departure_index_of_drone() ➔ 计算交错起飞/延时参数</span>',
+                            '<span class="interactive-step" id="step-update-influence" style="cursor: pointer; color: var(--primary); text-decoration: underline;">update_transition_constraint_influence() ➔ 提交F-Curves影响曲线</span>'
                         ]
                     },
                     {
@@ -595,6 +691,10 @@ SMOOTH
             const rightmostPane = document.getElementById('rightmost-pane');
             if (rightmostPane) {
                 rightmostPane.classList.remove('active');
+            }
+            const farRightmostPane = document.getElementById('far-rightmost-pane');
+            if (farRightmostPane) {
+                farRightmostPane.classList.remove('active');
             }
             
             detailsTitle.innerText = `💡 核心理解 (Key Takeaway)`;
@@ -647,6 +747,20 @@ SMOOTH
                 if (rightmostPane) {
                     rightmostPane.classList.remove('active');
                 }
+                const farRightmostPane = document.getElementById('far-rightmost-pane');
+                if (farRightmostPane) {
+                    farRightmostPane.classList.remove('active');
+                }
+
+                // Show switch button if node is recalculate_transitions
+                const switchBtn = document.getElementById('switch-btn');
+                if (switchBtn) {
+                    if (node.id === 'recalculate_transitions') {
+                        switchBtn.style.display = 'block';
+                    } else {
+                        switchBtn.style.display = 'none';
+                    }
+                }
 
                 if (node.children) {
                     detailsTitle.innerText = `子流程详情 (Sub-process Details): ${node.label}`;
@@ -671,12 +785,72 @@ SMOOTH
                     html += '</ul>';
                     detailsContent.innerHTML = html;
                     
-                    // Attach event listener for the newly injected interactive step
+                    // Attach event listener for the newly injected interactive steps
                     const stepUpdateConstraint = document.getElementById('step-update-constraint');
+                    const stepCalcDeparture = document.getElementById('step-calc-departure');
+                    const stepUpdateInfluence = document.getElementById('step-update-influence');
+                    const stepSetKeyframes = document.getElementById('step-set-keyframes');
+                    const rightmostPane = document.getElementById('rightmost-pane');
+                    const farRightmostPane = document.getElementById('far-rightmost-pane');
+                    const infoUpdate = document.getElementById('info-update-constraint');
+                    const infoCalc = document.getElementById('info-calc-departure');
+                    const infoInfluence = document.getElementById('info-update-influence');
+
                     if (stepUpdateConstraint) {
-                        stepUpdateConstraint.addEventListener('click', () => {
-                            const rightmostPane = document.getElementById('rightmost-pane');
-                            rightmostPane.classList.toggle('active');
+                        stepUpdateConstraint.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            if (farRightmostPane) farRightmostPane.classList.remove('active');
+                            if (rightmostPane.classList.contains('active') && infoUpdate.style.display === 'block') {
+                                rightmostPane.classList.remove('active');
+                            } else {
+                                infoUpdate.style.display = 'block';
+                                if (infoCalc) infoCalc.style.display = 'none';
+                                if (infoInfluence) infoInfluence.style.display = 'none';
+                                rightmostPane.classList.add('active');
+                            }
+                        });
+                    }
+
+                    if (stepCalcDeparture) {
+                        stepCalcDeparture.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            if (farRightmostPane) farRightmostPane.classList.remove('active');
+                            if (rightmostPane.classList.contains('active') && infoCalc.style.display === 'block') {
+                                rightmostPane.classList.remove('active');
+                            } else {
+                                infoCalc.style.display = 'block';
+                                if (infoUpdate) infoUpdate.style.display = 'none';
+                                if (infoInfluence) infoInfluence.style.display = 'none';
+                                rightmostPane.classList.add('active');
+                            }
+                        });
+                    }
+
+                    if (stepUpdateInfluence) {
+                        stepUpdateInfluence.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            if (farRightmostPane) farRightmostPane.classList.remove('active');
+                            if (rightmostPane.classList.contains('active') && infoInfluence.style.display === 'block') {
+                                rightmostPane.classList.remove('active');
+                            } else {
+                                infoInfluence.style.display = 'block';
+                                if (infoUpdate) infoUpdate.style.display = 'none';
+                                if (infoCalc) infoCalc.style.display = 'none';
+                                rightmostPane.classList.add('active');
+                            }
+                        });
+                    }
+
+                    if (stepSetKeyframes) {
+                        stepSetKeyframes.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            if (farRightmostPane) {
+                                if (farRightmostPane.classList.contains('active')) {
+                                    farRightmostPane.classList.remove('active');
+                                } else {
+                                    farRightmostPane.classList.add('active');
+                                }
+                            }
                         });
                     }
                 } else {
