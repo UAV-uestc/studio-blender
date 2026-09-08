@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>插件服务器 API 总结</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 移除 details 标签默认的三角形标记 */
+        details > summary {
+            list-style: none;
+        }
+        details > summary::-webkit-details-marker {
+            display: none;
+        }
+        /* 增加平滑过渡效果 */
+        details[open] summary ~ * {
+            animation: sweep .3s ease-in-out;
+        }
+        @keyframes sweep {
+            0%    {opacity: 0; margin-top: -10px}
+            100%  {opacity: 1; margin-top: 0px}
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 p-8 font-sans leading-relaxed">
+    <div class="max-w-6xl mx-auto">
+        <header class="mb-10 flex justify-between items-center">
+            <h1 class="text-4xl font-bold text-gray-900">插件服务器 API 总结</h1>
+        </header>
+
+        <!-- Skybrush Studio Server API -->
+        <section class="mb-8 bg-white rounded-xl shadow-lg p-6">
+            <h2 class="text-3xl font-semibold mb-4 border-b pb-2 text-blue-600">Skybrush Studio Server API</h2>
+            <p class="text-xl mb-6 text-gray-600">用于无人机表演设计操作的主要后端 API。默认基础 URL 为 <code class="bg-gray-100 px-2 py-1 rounded text-blue-800">http://localhost:5000/api/v1/</code>。</p>
+            
+            <div class="space-y-4">
+                <details class="group border border-gray-200 rounded-lg">
+                    <summary class="flex justify-between items-center font-medium cursor-pointer list-none p-4 bg-gray-100 hover:bg-gray-200 transition-colors rounded-lg group-open:rounded-b-none group-open:bg-blue-50">
+                        <div class="flex items-center gap-4">
+                            <span class="px-3 py-1 bg-green-500 text-white rounded text-lg font-bold w-20 text-center">GET</span>
+                            <span class="text-2xl font-mono text-gray-800">queries/version</span>
+                        </div>
+                        <span class="text-xl text-gray-600 font-semibold">获取服务器版本 ➔</span>
+                    </summary>
+                    <div class="p-6 bg-white border-t border-gray-200 text-xl text-gray-700">
+                        <p><strong>功能：</strong>获取后端服务器版本，用于兼容性检查。</p>
+                    </div>
+                </details>
+                
+                <details class="group border border-gray-200 rounded-lg">
+                    <summary class="flex justify-between items-center font-medium cursor-pointer list-none p-4 bg-gray-100 hover:bg-gray-200 transition-colors rounded-lg group-open:rounded-b-none group-open:bg-blue-50">
+                        <div class="flex items-center gap-4">
+                            <span class="px-3 py-1 bg-blue-500 text-white rounded text-lg font-bold w-20 text-center">POST</span>
+                            <span class="text-2xl font-mono text-gray-800">operations/decompose</span>
+                        </div>
+                        <span class="text-xl text-gray-600 font-semibold">分解点集 ➔</span>
+                    </summary>
+                    <div class="p-6 bg-white border-t border-gray-200 text-xl text-gray-700">
+                        <p><strong>功能：</strong>将一组点分解为多个组，确保最小安全距离。</p>
+                    </div>
+                </details>
+
+                <details class="group border border-gray-200 rounded-lg">
+                    <summary class="flex justify-between items-center font-medium cursor-pointer list-none p-4 bg-gray-100 hover:bg-gray-200 transition-colors rounded-lg group-open:rounded-b-none group-open:bg-blue-50">
+                        <div class="flex items-center gap-4">
+                            <span class="px-3 py-1 bg-blue-500 text-white rounded text-lg font-bold w-20 text-center">POST</span>
+                            <span class="text-2xl font-mono text-gray-800">operations/render</span>
+                        </div>
+                        <span class="text-xl text-gray-600 font-semibold">渲染表演数据 ➔</span>
+                    </summary>
+                    <div class="p-6 bg-white border-t border-gray-200 text-xl text-gray-700">
+                        <p><strong>功能：</strong>将无人机表演数据渲染为特定格式（如 .skyc、.csv 或图表）。</p>
+                    </div>
+                </details>
+
+                <details class="group border border-gray-200 rounded-lg">
+                    <summary class="flex justify-between items-center font-medium cursor-pointer list-none p-4 bg-gray-100 hover:bg-gray-200 transition-colors rounded-lg group-open:rounded-b-none group-open:bg-blue-50">
+                        <div class="flex items-center gap-4">
+                            <span class="px-3 py-1 bg-blue-500 text-white rounded text-lg font-bold w-20 text-center">POST</span>
+                            <span class="text-2xl font-mono text-gray-800">operations/multi-render</span>
+                        </div>
+                        <span class="text-xl text-gray-600 font-semibold">批量渲染数据 ➔</span>
+                    </summary>
+                    <div class="p-6 bg-white border-t border-gray-200 text-xl text-gray-700">
+                        <p><strong>功能：</strong>在单次请求中将表演数据渲染为多种格式。</p>
+                    </div>
+                </details>
+
+                <details class="group border border-gray-200 rounded-lg">
+                    <summary class="flex justify-between items-center font-medium cursor-pointer list-none p-4 bg-gray-100 hover:bg-gray-200 transition-colors rounded-lg group-open:rounded-b-none group-open:bg-blue-50">
+                        <div class="flex items-center gap-4">
+                            <span class="px-3 py-1 bg-blue-500 text-white rounded text-lg font-bold w-20 text-center">POST</span>
+                            <span class="text-2xl font-mono text-gray-800">operations/create-static-formation</span>
+                        </div>
+                        <span class="text-xl text-gray-600 font-semibold">生成静态编队 ➔</span>
+                    </summary>
+                    <div class="p-6 bg-white border-t border-gray-200 text-xl text-gray-700">
+                        <p><strong>功能：</strong>从 SVG 源文件生成静态无人机编队。</p>
+                    </div>
+                </details>
+
+                <details class="group border border-gray-200 rounded-lg">
+                    <summary class="flex justify-between items-center font-medium cursor-pointer list-none p-4 bg-gray-100 hover:bg-gray-200 transition-colors rounded-lg group-open:rounded-b-none group-open:bg-blue-50">
+                        <div class="flex items-center gap-4">
+                            <span class="px-3 py-1 bg-blue-500 text-white rounded text-lg font-bold w-20 text-center">POST</span>
+                            <span class="text-2xl font-mono text-gray-800">operations/match-points</span>
+                        </div>
+                        <span class="text-xl text-gray-600 font-semibold">点位匹配 ➔</span>
+                    </summary>
+                    <div class="p-6 bg-white border-t border-gray-200 text-xl text-gray-700">
+                        <p><strong>功能：</strong>匹配源点位和目标点位，以实现无碰撞的过渡。</p>
+                    </div>
+                </details>
+
+                <details class="group border border-gray-200 rounded-lg">
+                    <summary class="flex justify-between items-center font-medium cursor-pointer list-none p-4 bg-gray-100 hover:bg-gray-200 transition-colors rounded-lg group-open:rounded-b-none group-open:bg-blue-50">
+                        <div class="flex items-center gap-4">
+                            <span class="px-3 py-1 bg-blue-500 text-white rounded text-lg font-bold w-20 text-center">POST</span>
+                            <span class="text-2xl font-mono text-gray-800">operations/plan-landing</span>
+                        </div>
+                        <span class="text-xl text-gray-600 font-semibold">降落规划 ➔</span>
+                    </summary>
+                    <div class="p-6 bg-white border-t border-gray-200 text-xl text-gray-700">
+                        <p><strong>功能：</strong>为一组无人机计算降落轨迹和时间。</p>
+                    </div>
+                </details>
+
+                <details class="group border border-gray-200 rounded-lg">
+                    <summary class="flex justify-between items-center font-medium cursor-pointer list-none p-4 bg-gray-100 hover:bg-gray-200 transition-colors rounded-lg group-open:rounded-b-none group-open:bg-blue-50">
+                        <div class="flex items-center gap-4">
+                            <span class="px-3 py-1 bg-blue-500 text-white rounded text-lg font-bold w-20 text-center">POST</span>
+                            <span class="text-2xl font-mono text-gray-800">operations/plan-smart-rth</span>
+                        </div>
+                        <span class="text-xl text-gray-600 font-semibold">智能返航规划 ➔</span>
+                    </summary>
+                    <div class="p-6 bg-white border-t border-gray-200 text-xl text-gray-700">
+                        <p><strong>功能：</strong>为“智能返航”程序建议启动时间。</p>
+                    </div>
+                </details>
+
+                <details class="group border border-gray-200 rounded-lg">
+                    <summary class="flex justify-between items-center font-medium cursor-pointer list-none p-4 bg-gray-100 hover:bg-gray-200 transition-colors rounded-lg group-open:rounded-b-none group-open:bg-blue-50">
+                        <div class="flex items-center gap-4">
+                            <span class="px-3 py-1 bg-blue-500 text-white rounded text-lg font-bold w-20 text-center">POST</span>
+                            <span class="text-2xl font-mono text-gray-800">operations/plan-takeoff</span>
+                        </div>
+                        <span class="text-xl text-gray-600 font-semibold">起飞规划 ➔</span>
+                    </summary>
+                    <div class="p-6 bg-white border-t border-gray-200 text-xl text-gray-700">
+                        <p><strong>功能：</strong>规划分层起飞序列，以尽量减少下洗气流和碰撞。</p>
+                    </div>
+                </details>
+
+                <details class="group border border-gray-200 rounded-lg">
+                    <summary class="flex justify-between items-center font-medium cursor-pointer list-none p-4 bg-gray-100 hover:bg-gray-200 transition-colors rounded-lg group-open:rounded-b-none group-open:bg-blue-50">
+                        <div class="flex items-center gap-4">
+                            <span class="px-3 py-1 bg-blue-500 text-white rounded text-lg font-bold w-20 text-center">POST</span>
+                            <span class="text-2xl font-mono text-gray-800">operations/plan-transition</span>
+                        </div>
+                        <span class="text-xl text-gray-600 font-semibold">过渡规划 ➔</span>
+                    </summary>
+                    <div class="p-6 bg-white border-t border-gray-200 text-xl text-gray-700">
+                        <p><strong>功能：</strong>计算直线过渡的可行最短持续时间。</p>
+                    </div>
+                </details>
+            </div>
+        </section>
+
+        <!-- Skybrush Gateway API -->
+        <section class="mb-8 bg-white rounded-xl shadow-lg p-6">
+            <h2 class="text-3xl font-semibold mb-4 border-b pb-2 text-purple-600">Skybrush Gateway API</h2>
+            <p class="text-xl mb-6 text-gray-600">用于云端许可证认证（请求签名）和实时进度报告。默认基础 URL 为 <code class="bg-gray-100 px-2 py-1 rounded text-purple-800">http://localhost:5001/api/v1/</code>。</p>
+            
+            <div class="space-y-4">
+                <details class="group border border-gray-200 rounded-lg">
+                    <summary class="flex justify-between items-center font-medium cursor-pointer list-none p-4 bg-gray-100 hover:bg-gray-200 transition-colors rounded-lg group-open:rounded-b-none group-open:bg-purple-50">
+                        <div class="flex items-center gap-4">
+                            <span class="px-3 py-1 bg-green-500 text-white rounded text-lg font-bold w-20 text-center">GET</span>
+                            <span class="text-2xl font-mono text-gray-800">hwid</span>
+                        </div>
+                        <span class="text-xl text-gray-600 font-semibold">获取硬件ID ➔</span>
+                    </summary>
+                    <div class="p-6 bg-white border-t border-gray-200 text-xl text-gray-700">
+                        <p><strong>功能：</strong>获取机器的唯一硬件ID，用于设备识别与授权。</p>
+                    </div>
+                </details>
+
+                <details class="group border border-gray-200 rounded-lg">
+                    <summary class="flex justify-between items-center font-medium cursor-pointer list-none p-4 bg-gray-100 hover:bg-gray-200 transition-colors rounded-lg group-open:rounded-b-none group-open:bg-purple-50">
+                        <div class="flex items-center gap-4">
+                            <span class="px-3 py-1 bg-blue-500 text-white rounded text-lg font-bold w-20 text-center">POST</span>
+                            <span class="text-2xl font-mono text-gray-800">sign</span>
+                        </div>
+                        <span class="text-xl text-gray-600 font-semibold">请求签名 ➔</span>
+                    </summary>
+                    <div class="p-6 bg-white border-t border-gray-200 text-xl text-gray-700">
+                        <p><strong>功能：</strong>使用本地网关对 JSON 请求体进行签名，用于与云端的安全认证。</p>
+                    </div>
+                </details>
+
+                <details class="group border border-gray-200 rounded-lg">
+                    <summary class="flex justify-between items-center font-medium cursor-pointer list-none p-4 bg-gray-100 hover:bg-gray-200 transition-colors rounded-lg group-open:rounded-b-none group-open:bg-purple-50">
+                        <div class="flex items-center gap-4">
+                            <span class="px-3 py-1 bg-blue-500 text-white rounded text-lg font-bold w-20 text-center">POST</span>
+                            <span class="text-2xl font-mono text-gray-800">task</span>
+                        </div>
+                        <span class="text-xl text-gray-600 font-semibold">创建任务 ➔</span>
+                    </summary>
+                    <div class="p-6 bg-white border-t border-gray-200 text-xl text-gray-700">
+                        <p><strong>功能：</strong>在网关中创建一个具有进度跟踪的新任务。</p>
+                    </div>
+                </details>
+
+                <details class="group border border-gray-200 rounded-lg">
+                    <summary class="flex justify-between items-center font-medium cursor-pointer list-none p-4 bg-gray-100 hover:bg-gray-200 transition-colors rounded-lg group-open:rounded-b-none group-open:bg-purple-50">
+                        <div class="flex items-center gap-4">
+                            <span class="px-3 py-1 bg-yellow-500 text-white rounded text-lg font-bold w-20 text-center">PUT</span>
+                            <span class="text-2xl font-mono text-gray-800">{task_url}</span>
+                        </div>
+                        <span class="text-xl text-gray-600 font-semibold">更新任务 ➔</span>
+                    </summary>
+                    <div class="p-6 bg-white border-t border-gray-200 text-xl text-gray-700">
+                        <p><strong>功能：</strong>更新正在运行的任务的进度百分比和状态。</p>
+                    </div>
+                </details>
+
+                <details class="group border border-gray-200 rounded-lg">
+                    <summary class="flex justify-between items-center font-medium cursor-pointer list-none p-4 bg-gray-100 hover:bg-gray-200 transition-colors rounded-lg group-open:rounded-b-none group-open:bg-purple-50">
+                        <div class="flex items-center gap-4">
+                            <span class="px-3 py-1 bg-red-500 text-white rounded text-lg font-bold w-20 text-center">DELETE</span>
+                            <span class="text-2xl font-mono text-gray-800">{task_url}</span>
+                        </div>
+                        <span class="text-xl text-gray-600 font-semibold">删除任务 ➔</span>
+                    </summary>
+                    <div class="p-6 bg-white border-t border-gray-200 text-xl text-gray-700">
+                        <p><strong>功能：</strong>删除或完成进度任务。</p>
+                    </div>
+                </details>
+            </div>
+        </section>
+
+        <!-- Skybrush Viewer API -->
+        <section class="mb-8 bg-white rounded-xl shadow-lg p-6">
+            <h2 class="text-3xl font-semibold mb-4 border-b pb-2 text-teal-600">Skybrush Viewer API</h2>
+            <p class="text-xl mb-6 text-gray-600">用于与本地 Skybrush Viewer 实例通信，进行实时 3D 可视化。端点通过 SSDP 动态发现。</p>
+            
+            <div class="space-y-4">
+                <details class="group border border-gray-200 rounded-lg">
+                    <summary class="flex justify-between items-center font-medium cursor-pointer list-none p-4 bg-gray-100 hover:bg-gray-200 transition-colors rounded-lg group-open:rounded-b-none group-open:bg-teal-50">
+                        <div class="flex items-center gap-4">
+                            <span class="px-3 py-1 bg-green-500 text-white rounded text-lg font-bold w-20 text-center">GET</span>
+                            <span class="text-2xl font-mono text-gray-800">api/v1/ping</span>
+                        </div>
+                        <span class="text-xl text-gray-600 font-semibold">检查连接 ➔</span>
+                    </summary>
+                    <div class="p-6 bg-white border-t border-gray-200 text-xl text-gray-700">
+                        <p><strong>功能：</strong>检查 Skybrush Viewer 实例是否正在运行并可访问。</p>
+                    </div>
+                </details>
+
+                <details class="group border border-gray-200 rounded-lg">
+                    <summary class="flex justify-between items-center font-medium cursor-pointer list-none p-4 bg-gray-100 hover:bg-gray-200 transition-colors rounded-lg group-open:rounded-b-none group-open:bg-teal-50">
+                        <div class="flex items-center gap-4">
+                            <span class="px-3 py-1 bg-blue-500 text-white rounded text-lg font-bold w-20 text-center">POST</span>
+                            <span class="text-2xl font-mono text-gray-800">api/v1/load</span>
+                        </div>
+                        <span class="text-xl text-gray-600 font-semibold">加载表演数据 ➔</span>
+                    </summary>
+                    <div class="p-6 bg-white border-t border-gray-200 text-xl text-gray-700">
+                        <p><strong>功能：</strong>将 <code>.skyc</code> 表演数据发送至 Viewer 进行即时 3D 轨迹可视化。</p>
+                    </div>
+                </details>
+            </div>
+        </section>
+
+        <!-- 其他服务与发现机制 -->
+        <section class="mb-8 bg-white rounded-xl shadow-lg p-6">
+            <h2 class="text-3xl font-semibold mb-4 border-b pb-2 text-orange-600">其他服务与发现机制</h2>
+            
+            <div class="space-y-4">
+                <details class="group border border-gray-200 rounded-lg">
+                    <summary class="flex justify-between items-center font-medium cursor-pointer list-none p-4 bg-gray-100 hover:bg-gray-200 transition-colors rounded-lg group-open:rounded-b-none group-open:bg-orange-50">
+                        <div class="flex items-center gap-4">
+                            <span class="px-3 py-1 bg-gray-500 text-white rounded text-lg font-bold w-20 text-center">UDP</span>
+                            <span class="text-2xl font-mono text-gray-800">239.255.255.250:1900</span>
+                        </div>
+                        <span class="text-xl text-gray-600 font-semibold">SSDP 发现 ➔</span>
+                    </summary>
+                    <div class="p-6 bg-white border-t border-gray-200 text-xl text-gray-700">
+                        <p><strong>功能：</strong>通过 SSDP <code>M-SEARCH</code> 多播请求自动发现局域网中的 Skybrush Viewer 实例，实现免配置连接。</p>
+                    </div>
+                </details>
+
+                <details class="group border border-gray-200 rounded-lg">
+                    <summary class="flex justify-between items-center font-medium cursor-pointer list-none p-4 bg-gray-100 hover:bg-gray-200 transition-colors rounded-lg group-open:rounded-b-none group-open:bg-orange-50">
+                        <div class="flex items-center gap-4">
+                            <span class="px-3 py-1 bg-gray-700 text-white rounded text-lg font-bold w-20 text-center">HTTPS</span>
+                            <span class="text-2xl font-mono text-gray-800">account.skybrush.io</span>
+                        </div>
+                        <span class="text-xl text-gray-600 font-semibold">硬件注册 ➔</span>
+                    </summary>
+                    <div class="p-6 bg-white border-t border-gray-200 text-xl text-gray-700">
+                        <p><strong>功能：</strong>打开系统默认浏览器，引导用户在 Skybrush 云端账户中注册当前机器的硬件 ID 进行授权绑定。</p>
+                    </div>
+                </details>
+            </div>
+        </section>
+
+    </div>
+</body>
+</html>
