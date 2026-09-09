@@ -48,6 +48,11 @@ test.cmd = "python -m pytest test"
 module-root = "src/modules"
 module-name = "sbstudio"
 
+[tool.uv.workspace]
+members = [
+    "server",
+]
+
 [tool.ruff]
 lint.ignore = ["B027", "B905", "C901", "E402", "E501", "E731"]
 lint.select = ["B", "C", "E", "F", "I", "W"]

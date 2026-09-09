@@ -349,7 +349,7 @@
             <a id="switch-btn" href="transition.html" style="display: none; background: var(--primary); color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 0.9rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: background 0.2s; white-space: nowrap; margin-left: 1rem;">View Transition Architecture ➔</a>
         </div>
         <div id="details-content">
-            <div class="empty-state">将鼠标悬停在左侧节点上以查看递归调用详情<br>(Hover over a node on the left to view recursive call details)</div>
+            <div class="empty-state">点击左侧节点以查看递归调用详情<br>(Click on a node on the left to view recursive call details)</div>
         </div>
     </div>
 
@@ -684,9 +684,25 @@ SMOOTH
         // Initially show right pane with empty state
         detailsPane.style.display = 'block';
 
+        // Add step-set-keyframes interaction (static element)
+        const stepSetKeyframesStatic = document.getElementById('step-set-keyframes');
+        const farRightmostPaneStatic = document.getElementById('far-rightmost-pane');
+        if (stepSetKeyframesStatic) {
+            stepSetKeyframesStatic.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (farRightmostPaneStatic) {
+                    if (farRightmostPaneStatic.classList.contains('active')) {
+                        farRightmostPaneStatic.classList.remove('active');
+                    } else {
+                        farRightmostPaneStatic.classList.add('active');
+                    }
+                }
+            });
+        }
+
         // Add takeaway interaction
         const takeawayNode = document.getElementById('takeaway-node');
-        takeawayNode.addEventListener('mouseenter', () => {
+        takeawayNode.addEventListener('click', () => {
             document.querySelectorAll('.node').forEach(n => n.classList.remove('active'));
             takeawayNode.classList.add('active');
             
@@ -739,8 +755,8 @@ SMOOTH
             el.className = 'node' + (node.children ? ' has-children' : '');
             el.innerHTML = `<strong>${node.label}</strong><div class="desc" style="font-size: 1rem;">${node.desc}</div>`;
             
-            // Add Interaction (Hover)
-            el.addEventListener('mouseenter', () => {
+            // Add Interaction (Click)
+            el.addEventListener('click', () => {
                 // Remove active class from all nodes and takeaway
                 document.querySelectorAll('.node, .takeaway').forEach(n => n.classList.remove('active'));
                 el.classList.add('active');
@@ -792,7 +808,6 @@ SMOOTH
                     const stepUpdateConstraint = document.getElementById('step-update-constraint');
                     const stepCalcDeparture = document.getElementById('step-calc-departure');
                     const stepUpdateInfluence = document.getElementById('step-update-influence');
-                    const stepSetKeyframes = document.getElementById('step-set-keyframes');
                     const rightmostPane = document.getElementById('rightmost-pane');
                     const farRightmostPane = document.getElementById('far-rightmost-pane');
                     const infoUpdate = document.getElementById('info-update-constraint');
@@ -840,19 +855,6 @@ SMOOTH
                                 if (infoUpdate) infoUpdate.style.display = 'none';
                                 if (infoCalc) infoCalc.style.display = 'none';
                                 rightmostPane.classList.add('active');
-                            }
-                        });
-                    }
-
-                    if (stepSetKeyframes) {
-                        stepSetKeyframes.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            if (farRightmostPane) {
-                                if (farRightmostPane.classList.contains('active')) {
-                                    farRightmostPane.classList.remove('active');
-                                } else {
-                                    farRightmostPane.classList.add('active');
-                                }
                             }
                         });
                     }
