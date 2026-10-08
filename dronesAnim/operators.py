@@ -200,7 +200,7 @@ class ExportMATOperator(Operator, ExportHelper):
             for part in re.split(r"(\d+)", obj.name)
         ])
         frame_count = end_frame - start_frame + 1
-        coordinates = {axis: array("d") for axis in "XYZ"}
+        coordinates = {axis: array("d") for axis in "xyz"}
         original_frame, original_subframe = scene.frame_current, scene.frame_subframe
         temporary_path = None
         wm = context.window_manager
@@ -212,7 +212,7 @@ class ExportMATOperator(Operator, ExportHelper):
                     depsgraph = context.evaluated_depsgraph_get()
                     for drone in drones:
                         position = drone.evaluated_get(depsgraph).matrix_world.translation
-                        for axis, value in zip("XYZ", position):
+                        for axis, value in zip("xyz", position):
                             coordinates[axis].append(value)
                     wm.progress_update(column + 1)
             finally:

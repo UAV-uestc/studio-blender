@@ -18,7 +18,7 @@ def write_mat(stream, rows, columns, coordinates):
     count = rows * columns
     if rows <= 0 or columns <= 0:
         raise ValueError("无人机数量和帧数必须大于零")
-    if set(coordinates) != {"X", "Y", "Z"} or any(
+    if set(coordinates) != {"x", "y", "z"} or any(
         len(values) != count for values in coordinates.values()
     ):
         raise ValueError("坐标矩阵尺寸不一致")
@@ -34,22 +34,23 @@ def write_mat(stream, rows, columns, coordinates):
         + struct.pack("<H", 0x0100) # [Version:2B]
         + b"IM"                     # [Endian:2B]
     )
-    for name in ("R", "B", "G", "X", "Y", "Z"):
-        color = name in "RBG"
+    for name in ("r", "b", "g", "x", "y", "z"):
+        is_color = name in "rbg"
         metadata = (
-            _element(6, struct.pack("<II", 9 if color else 6, 0))   # [Class:4B] [Reserved:4B]; class: uint8=9, double=6
+            _element(6, struct.pack("<II", 6, 0))                 # [Class:4B] [Reserved:4B]; double=6
             + _element(5, struct.pack("<ii", rows, columns))        # [Rows:4B] [Columns:4B]
-            + _element(1, name.encode("ascii"))                     # [Name:1B] [Padding:7B]
+            + _element(1, name.encode("ascii"))                   # [Name:1B] [Padding:7B]
         )
-        byte_count = count if color else count * 8
+        byte_count = count * 8
         padding = -byte_count % 8
         stream.write(struct.pack("<II", 14, len(metadata) + 8 + byte_count + padding))  # [Matrix type:4B] [Content size:4B]
         stream.write(metadata)
-        stream.write(struct.pack("<II", 2 if color else 9, byte_count))                 # [Storage type:4B] [Data size:4B]; uint8=2, double=9
-        if color:
-            chunk = b"\xff" * min(count, 65536)  # White (255), in bounded chunks
-            for offset in range(0, count, len(chunk)):
-                stream.write(chunk[:min(len(chunk), count - offset)])
+        stream.write(struct.pack("<II", 9, byte_count))                               # [Storage type:4B] [Data size:4B]; double=9
+        if is_color:
+            chunk_count = min(count, 8192)
+            chunk = struct.pack("<d", 255.0) * chunk_count  # [White:8B/sample], in bounded chunks
+            for offset in range(0, count, chunk_count):
+                stream.write(chunk[:min(chunk_count, count - offset) * 8])
         else:
             values = coordinates[name]
             if sys.byteorder != "little":
