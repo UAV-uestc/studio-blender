@@ -1,8 +1,16 @@
+import os
+import re
+import tempfile
+from array import array
+from pathlib import Path
+
 import bpy
-from bpy.props import FloatProperty, IntProperty, PointerProperty
+from bpy.props import FloatProperty, IntProperty, PointerProperty, StringProperty
 from bpy.types import Context, Operator, Panel, PropertyGroup, Scene
+from bpy_extras.io_utils import ExportHelper
 
 from .drones import create_drone, create_drone_mesh, drone_names, get_drone_collection
+from .mat_export import write_mat
 
 __all__ = ()
 
@@ -148,24 +156,83 @@ class AttachDronesToVerticesOperator(Operator):
         return {"FINISHED"}
 
 
-class ExportMATOperator(Operator):
+class ExportMATOperator(Operator, ExportHelper):
     bl_idname = "drones_anim.export_mat"
     bl_label = "导出MAT"
     bl_description = "导出MAT格式文件"
-    bl_options = {"REGISTER", "UNDO"}
+    filename_ext = ".mat"
+    filter_glob: StringProperty(default="*.mat", options={"HIDDEN"})
 
     @classmethod
     def poll(cls, context: Context) -> bool:
+        if context.scene is None:
+            return False
+        props = context.scene.drones_anim_panel
+        if props.end_frame < props.start_frame:
+            cls.poll_message_set("终止帧不能小于起始帧")
+            return False
         return True
+
+    def invoke(self, context, event):
+        if not self.filepath:
+            self.filepath = (
+                str(Path(bpy.data.filepath).with_suffix(".mat"))
+                if bpy.data.filepath else "drone_show.mat"
+            )
+        return ExportHelper.invoke(self, context, event)
 
     def execute(self, context: Context) -> set[str]:
         props = context.scene.drones_anim_panel
         start_frame = props.start_frame
         end_frame = props.end_frame
-        self.report(
-            {"INFO"},
-            f"导出MAT: 起始帧={start_frame}, 终止帧={end_frame}",
-        )
+        scene = context.scene
+        collection = bpy.data.collections.get("Drones")
+        drones = []
+        if collection is not None and collection in scene.collection.children_recursive:
+            drones = [
+                obj for obj in collection.all_objects
+                if obj.type == "MESH" and "drones_anim_vertex_index" in obj
+                and obj.name in scene.objects
+            ]
+        # Tagged objects remain exportable even if their attachment is removed.
+        drones.sort(key=lambda obj: [
+            (1, int(part)) if part.isdigit() else (0, part.casefold())
+            for part in re.split(r"(\d+)", obj.name)
+        ])
+        frame_count = end_frame - start_frame + 1
+        coordinates = {axis: array("d") for axis in "xyz"}
+        original_frame, original_subframe = scene.frame_current, scene.frame_subframe
+        temporary_path = None
+        wm = context.window_manager
+        wm.progress_begin(0, frame_count)
+        try:
+            try:
+                for column, frame in enumerate(range(start_frame, end_frame + 1)):
+                    scene.frame_set(frame)
+                    depsgraph = context.evaluated_depsgraph_get()
+                    for drone in drones:
+                        position = drone.evaluated_get(depsgraph).matrix_world.translation
+                        for axis, value in zip("xyz", position):
+                            coordinates[axis].append(value)
+                    wm.progress_update(column + 1)
+            finally:
+                scene.frame_set(original_frame, subframe=original_subframe)
+            destination = Path(bpy.path.abspath(bpy.path.ensure_ext(self.filepath, ".mat")))
+            with tempfile.NamedTemporaryFile(
+                mode="wb", dir=destination.parent, suffix=".mat.tmp", delete=False
+            ) as stream:
+                temporary_path = stream.name
+                write_mat(stream, len(drones), frame_count, coordinates)
+            os.replace(temporary_path, destination)
+            temporary_path = None
+        except Exception as exc:
+            self.report({"ERROR"}, f"MAT导出失败: {exc}")
+            return {"CANCELLED"}
+        finally:
+            wm.progress_end()
+            if temporary_path is not None:
+                Path(temporary_path).unlink(missing_ok=True)
+        self.report({"INFO"}, f"已导出 {len(drones)} 架无人机，{frame_count} 帧: {destination}")
         return {"FINISHED"}
 
 
