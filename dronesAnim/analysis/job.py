@@ -9,7 +9,7 @@ from pathlib import Path
 
 import bpy
 
-from .analysis_math import MotionAnalysis, MotionPlot
+from .numerics import MotionAnalysis, MotionPlot
 
 
 class AnalysisJob:
@@ -37,7 +37,7 @@ class AnalysisJob:
             raise
 
     def _launch(self):
-        worker = Path(__file__).with_name("analysis_worker.py")
+        worker = Path(__file__).with_name("worker.py")
         command = [
             bpy.app.binary_path, "--background", "--factory-startup", "--disable-autoexec",
             "--python-exit-code", "1", "--python", str(worker),

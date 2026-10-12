@@ -44,7 +44,7 @@ def main(request_path):
         request = json.loads(Path(request_path).read_text(encoding="utf-8"))
         # Load only the numerical module, without registering the parent add-on.
         spec = importlib.util.spec_from_file_location(
-            "drone_motion_worker_math", Path(__file__).with_name("analysis_math.py"),
+            "drone_motion_worker_math", Path(__file__).with_name("numerics.py"),
         )
         math_module = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = math_module

@@ -10,9 +10,9 @@ from bpy.props import BoolProperty, EnumProperty, IntProperty, PointerProperty, 
 from bpy.types import Operator, Panel, PropertyGroup, Scene
 from bpy_extras.io_utils import ExportHelper
 
-from .analysis_job import AnalysisJob
-from .analysis_sampling import calculate_motion
-from . import analysis_plot
+from .job import AnalysisJob
+from .sampling import calculate_motion
+from . import plot
 
 _results = {}
 _views = set()
@@ -130,7 +130,7 @@ class DroneMotionCalculateOperator(Operator):
     def _store_result(self, data):
         """Publish a completed result and invalidate cached chart geometry."""
         _results[self._key] = data
-        analysis_plot.clear_cache()
+        plot.clear_cache()
         self.report({"INFO"}, f"已计算 {len(data.names)} 架无人机、{data.end - data.start + 1} 帧的8项曲线")
         return {"FINISHED"}
 
@@ -301,7 +301,7 @@ class DroneMotionViewOperator(Operator):
                 return {"PASS_THROUGH"}
             data = _results.get(context.scene.as_pointer())
             if data:
-                frame = analysis_plot.clicked_frame(data, region.width, region.height,
+                frame = plot.clicked_frame(data, region.width, region.height,
                                                     event.mouse_x - region.x, event.mouse_y - region.y)
                 if frame is not None:
                     context.scene.frame_set(frame)
@@ -375,7 +375,7 @@ class DroneMotionExportOperator(Operator, ExportHelper):
         props = scene.drones_anim_analysis
         destination = bpy.path.abspath(bpy.path.ensure_ext(self.filepath, ".png"))
         try:
-            analysis_plot.export_png(
+            plot.export_png(
                 _results[scene.as_pointer()], destination, self.width, self.height,
                 props.style, props.time_axis == "SECONDS", scene.frame_current_final,
                 _stale(scene, _results[scene.as_pointer()]))
@@ -470,7 +470,7 @@ def _draw():
     if data is None:
         return
     props = context.scene.drones_anim_analysis
-    analysis_plot.draw_analysis(data, context.region.width, context.region.height,
+    plot.draw_analysis(data, context.region.width, context.region.height,
                                 props.style, props.time_axis == "SECONDS", context.scene.frame_current_final,
                                 _stale(context.scene, data))
 
@@ -504,7 +504,7 @@ def _loaded(_unused):
     _view_ops.clear()
     _results.clear()
     _views.clear()
-    analysis_plot.clear_cache()
+    plot.clear_cache()
 
 
 def register():
