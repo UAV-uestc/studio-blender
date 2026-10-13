@@ -22,19 +22,19 @@ def _element(data_type, data):
     )
 
 
-def write_mat(stream, rows, columns, coordinates):
+def write_mat(stream, rows, columns, samples):
     """Write six matrices and zero-based Qn indices matching coordinate rows."""
     count = rows * columns
     if rows <= 0 or columns <= 0:
         raise ValueError("无人机数量和帧数必须大于零")
-    if set(coordinates) != {"x", "y", "z"} or any(
-        len(values) != count for values in coordinates.values()
+    if set(samples) != set("xyzrgb") or any(
+        len(values) != count for values in samples.values()
     ):
-        raise ValueError("坐标矩阵尺寸不一致")
+        raise ValueError("坐标或颜色矩阵尺寸不一致")
     if rows > 0x7FFFFFFF or columns > 0x7FFFFFFF or count * 8 + 64 >= 2**31:
         raise ValueError("矩阵过大，超出当前 MAT 格式限制")
-    if any(values.typecode != "d" or values.itemsize != 8 for values in coordinates.values()):
-        raise ValueError("坐标必须使用八字节 double 数组")
+    if any(values.typecode != "d" or values.itemsize != 8 for values in samples.values()):
+        raise ValueError("坐标和颜色必须使用八字节 double 数组")
 
     header = b"MATLAB 5.0 MAT-file, Created by Drone Animations"
     stream.write(
@@ -44,7 +44,6 @@ def write_mat(stream, rows, columns, coordinates):
         + b"IM"                     # [Endian:2B]
     )
     for name in ("r", "b", "g", "x", "y", "z", "Qn"):
-        is_color = name in "rbg"
         is_index = name == "Qn"
         matrix_columns = 1 if is_index else columns
         matrix_count = rows * matrix_columns
@@ -63,17 +62,12 @@ def write_mat(stream, rows, columns, coordinates):
             for start in range(0, rows, 8192):
                 indices = range(start, min(start + 8192, rows))
                 stream.write(struct.pack("<" + "d" * len(indices), *indices)) # [Index:8B/drone]
-        elif is_color:
-            chunk_count = min(count, 8192)
-            chunk = struct.pack("<d", 255.0) * chunk_count  # [White:8B/sample], in bounded chunks
-            for offset in range(0, count, chunk_count):
-                stream.write(chunk[:min(chunk_count, count - offset) * 8])
         else:
-            values = coordinates[name]
+            values = samples[name]
             if sys.byteorder != "little":
                 values = values[:]  # Preserve the input array
                 values.byteswap()  # Convert to little-endian
-            stream.write(memoryview(values).cast("B"))  # [Coordinates:count*8B]
+            stream.write(memoryview(values).cast("B"))  # [Samples:count*8B]
         stream.write(b"\0" * padding)  # [Padding:0-7B]
 
 
@@ -103,11 +97,12 @@ def _export_drones(scene):
     return drones
 
 
-def _sample_coordinates(context, drones, plan):
+def _sample_drones(context, drones, plan):
+    """Sample world positions and object RGB on the same evaluated frames."""
     from . import safety
 
     scene = context.scene
-    coordinates = {axis: array("d") for axis in "xyz"}
+    samples = {name: array("d") for name in "xyzrgb"}
     original_frame, original_subframe = scene.frame_current, scene.frame_subframe
     previous_scanning = safety._scanning
     try:
@@ -117,9 +112,11 @@ def _sample_coordinates(context, drones, plan):
             scene.frame_set(integer_frame, subframe=frame - integer_frame)
             depsgraph = context.evaluated_depsgraph_get()
             for drone in drones:
-                position = drone.evaluated_get(depsgraph).matrix_world.translation
-                for axis, value in zip("xyz", position):
-                    coordinates[axis].append(value)
+                evaluated = drone.evaluated_get(depsgraph)
+                for axis, value in zip("xyz", evaluated.matrix_world.translation):
+                    samples[axis].append(value)
+                for channel, value in zip("rgb", evaluated.color):
+                    samples[channel].append(min(1.0, max(0.0, value)) * 255.0)
             context.window_manager.progress_update(column + 1)
     finally:
         try:
@@ -128,10 +125,10 @@ def _sample_coordinates(context, drones, plan):
             safety._scanning = previous_scanning
         if not previous_scanning:
             safety._update(scene, context.evaluated_depsgraph_get())
-    return coordinates
+    return samples
 
 
-def _write_mat_file(destination, rows, columns, coordinates):
+def _write_mat_file(destination, rows, columns, samples):
     """Replace the destination only after a complete write."""
     temporary_path = None
     try:
@@ -139,7 +136,7 @@ def _write_mat_file(destination, rows, columns, coordinates):
             mode="wb", dir=destination.parent, suffix=".mat.tmp", delete=False
         ) as stream:
             temporary_path = stream.name
-            write_mat(stream, rows, columns, coordinates)
+            write_mat(stream, rows, columns, samples)
         os.replace(temporary_path, destination)
         temporary_path = None
     finally:
@@ -164,8 +161,8 @@ def export_mat(context, filepath):
     wm = context.window_manager
     wm.progress_begin(0, plan.count)
     try:
-        coordinates = _sample_coordinates(context, drones, plan)
-        _write_mat_file(destination, len(drones), plan.count, coordinates)
+        samples = _sample_drones(context, drones, plan)
+        _write_mat_file(destination, len(drones), plan.count, samples)
     finally:
         wm.progress_end()
     return MATExportResult(destination, len(drones), plan)
