@@ -2,21 +2,13 @@
 
 from array import array
 from dataclasses import dataclass
-from itertools import product
-from math import dist, hypot, isfinite, nan
-
-try:
-    from mathutils import Vector
-    from mathutils.kdtree import KDTree
-except ImportError:
-    KDTree = None
+from math import hypot, isfinite, nan
 
 
 METRICS = (("vx", "m/s"), ("ax", "m/s^2"),
            ("vy", "m/s"), ("ay", "m/s^2"),
            ("vz", "m/s"), ("az", "m/s^2"),
            ("vxy", "m/s"), ("distance", "m"))
-_NEIGHBOR_CELLS = tuple(product((-1, 0, 1), repeat=3))
 
 
 @dataclass
@@ -41,115 +33,23 @@ class MotionAnalysis:
     closest_pair: tuple | None
 
 
-def _brute_pair(points, count):
-    """Find a seed pair among a prefix, or scan all points as a fallback."""
-    pair = (0, 1)
-    best = dist(points[0], points[1])
-    if best == 0:
-        return best, pair
-    for first in range(count):
-        point = points[first]
-        for second in range(first + 1, count):
-            distance = dist(point, points[second])
-            if distance < best:
-                best, pair = distance, (first, second)
+def nearest_pair(points):
+    """Exact nearest pair with x-axis pruning; include every supplied point."""
+    ordered = sorted(enumerate(points), key=lambda item: item[1][0])
+    best = float("inf")
+    pair = None
+    for index, (first, point) in enumerate(ordered):
+        for other_index in range(index + 1, len(ordered)):
+            second, other = ordered[other_index]
+            dx = other[0] - point[0]
+            if dx * dx >= best:
+                break
+            squared = sum((point[axis] - other[axis]) ** 2 for axis in range(3))
+            if squared < best:
+                best, pair = squared, (first, second)
                 if best == 0:
-                    return best, pair
-    return best, pair
-
-
-def _cell_key(point, width_numerator, width_denominator):
-    """Floor exact float ratios so cell boundaries cannot round away a pair."""
-    x, xd = point[0].as_integer_ratio()
-    y, yd = point[1].as_integer_ratio()
-    z, zd = point[2].as_integer_ratio()
-    return (x * width_denominator // (xd * width_numerator),
-            y * width_denominator // (yd * width_numerator),
-            z * width_denominator // (zd * width_numerator))
-
-
-def nearest_pair_buckets(points, previous_pair=None):
-    """Find the exact nearest pair using a current-frame bound and 3D buckets."""
-    count = len(points)
-    if count < 2:
-        return nan, None
-    # Small clouds cost less to scan than to hash 27 neighbors per point.
-    if count <= 64:
-        return _brute_pair(points, count)
-    if previous_pair is None:
-        best, pair = _brute_pair(points, 32)
-    else:
-        pair = previous_pair
-        best = dist(points[pair[0]], points[pair[1]])
-    if best == 0:
-        return best, pair
-    if not isfinite(best):
-        return _brute_pair(points, count)
-
-    # Keep this width fixed; every closer pair lies in neighboring cells.
-    numerator, denominator = best.as_integer_ratio()
-    buckets = {}
-    for second, point in enumerate(points):
-        x, y, z = _cell_key(point, numerator, denominator)
-        for dx, dy, dz in _NEIGHBOR_CELLS:
-            for first in buckets.get((x + dx, y + dy, z + dz), ()):
-                distance = dist(points[first], point)
-                if distance < best:
-                    best, pair = distance, (first, second)
-                    if best == 0:
-                        return best, pair
-        buckets.setdefault((x, y, z), []).append(second)
-    return best, pair
-
-
-def nearest_pair_kdtree(points, previous_pair=None):
-    """Search native KD ranges, then measure candidates in original precision."""
-    count = len(points)
-    if count < 2:
-        return nan, None
-    if KDTree is None:
-        return nearest_pair_buckets(points, previous_pair)
-    if previous_pair is None:
-        best, pair = _brute_pair(points, min(count, 32))
-    else:
-        pair = previous_pair
-        best = dist(points[pair[0]], points[pair[1]])
-    if best == 0:
-        return best, pair
-    if not 1e-18 <= best <= 1e18:
-        return nearest_pair_buckets(points, previous_pair)
-
-    tree = KDTree(count)
-    coordinates = []
-    error = 0.0
-    for index, point in enumerate(points):
-        coordinate = Vector(point)
-        # Native squared distances require a safe single-precision scale.
-        if any(not isfinite(value) or abs(value) > 1e18 for value in coordinate):
-            return nearest_pair_buckets(points, previous_pair)
-        error = max(error, dist(point, coordinate))
-        coordinates.append(coordinate)
-        tree.insert(coordinate, index)
-    if error > best * 1e-4:
-        return nearest_pair_buckets(points, previous_pair)
-    tree.balance()
-    for first, coordinate in enumerate(coordinates):
-        # Pad quantization and float arithmetic; equal native distances can tie.
-        radius = max(1e-18, (best + 2 * error) * (1 + 1e-6))
-        for _coordinate, second, _distance in tree.find_range(coordinate, radius):
-            if second <= first:
-                continue
-            distance = dist(points[first], points[second])
-            if distance < best:
-                best, pair = distance, (first, second)
-                if best == 0:
-                    return best, pair
-    return best, pair
-
-
-def nearest_pair(points, previous_pair=None):
-    """Use native KD searches for every cloud size."""
-    return nearest_pair_kdtree(points, previous_pair)
+                    return 0.0, pair
+    return (best ** 0.5, pair) if pair is not None else (nan, None)
 
 
 def derivatives(values, fps):
@@ -200,7 +100,6 @@ class AnalysisBuilder:
         self.distances = array("d")
         self.closest_frame = self.closest_pair = None
         self.best_distance = float("inf")
-        self._previous_pair = None
         self.result = None
 
     def append(self, points):
@@ -210,8 +109,7 @@ class AnalysisBuilder:
             raise ValueError("采样点超出帧范围")
         if any(len(point) != 3 or not all(isfinite(value) for value in point) for point in points):
             raise ValueError("无人机坐标包含非有限值或无效维度")
-        distance, pair = nearest_pair(points, self._previous_pair)
-        self._previous_pair = pair
+        distance, pair = nearest_pair(points)
         if pair is not None and distance < self.best_distance:
             self.best_distance = distance
             self.closest_frame = self.start + len(self.distances)
