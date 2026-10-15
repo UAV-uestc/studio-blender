@@ -33,6 +33,9 @@ def create_drone_mesh(radius=0.1):
     nodes.clear()
     info = nodes.new("ShaderNodeObjectInfo")
     emission = nodes.new("ShaderNodeEmission")
+    settings = getattr(bpy.context.scene, "drones_anim_led", None)
+    if settings is not None:
+        emission.inputs["Strength"].default_value = settings.emission_strength
     output = nodes.new("ShaderNodeOutputMaterial")
     links.new(info.outputs["Color"], emission.inputs["Color"])
     links.new(emission.outputs["Emission"], output.inputs["Surface"])
