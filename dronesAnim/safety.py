@@ -22,7 +22,6 @@ from .safety_math import Limits, Result, Snapshot, evaluate_frame, warning_messa
 class _SceneState:
     snapshots: list[Snapshot] = field(default_factory=list)
     result: Result | None = None
-    full_pairs_frame: int | None = None
 
 
 _states: dict[int, _SceneState] = {}
@@ -100,7 +99,6 @@ def _update(scene, depsgraph):
     if not props.enabled:
         state.result = None
         state.snapshots.clear()
-        state.full_pairs_frame = None
         _redraw()
         return
     snapshot = _snapshot(scene, depsgraph)
@@ -112,8 +110,6 @@ def _update(scene, depsgraph):
             history.clear()
         history.append(snapshot)
         del history[:-3]
-    if state.full_pairs_frame != snapshot.frame:
-        state.full_pairs_frame = None
     fps = scene.render.fps / scene.render.fps_base
     state.result = evaluate_frame(
         snapshot,
@@ -121,7 +117,6 @@ def _update(scene, depsgraph):
         fps,
         previous=history[-2] if len(history) > 1 else None,
         earlier=history[-3] if len(history) > 2 else None,
-        all_pairs=state.full_pairs_frame == snapshot.frame,
     )
     _redraw()
 
@@ -163,6 +158,11 @@ class DroneAnimSafetyProperties(PropertyGroup):
             ("ABOVE_MIN_NAV_ALT", "最低导航高度以上", "仅检测最低导航高度以上的无人机"),
         ),
         default="ABOVE_MIN_NAV_ALT", update=_settings_changed,
+    )
+    show_proximity_pair_lines: BoolProperty(
+        name="显示距离警告无人机对连线",
+        description="用红色连线显示所有间距小于最小距离的无人机对",
+        default=False, update=_settings_changed,
     )
     altitude_warning_enabled: BoolProperty(
         name="高度警告", default=True, update=_settings_changed
@@ -208,29 +208,6 @@ class DroneAnimSafetyProperties(PropertyGroup):
         update=_settings_changed,
     )
     validation_summary: StringProperty(name="区间检查结果", default="")
-
-
-class DroneAnimFullProximityCheckOperator(Operator):
-    bl_idname = "drones_anim.full_proximity_check"
-    bl_label = "计算全部距离警告"
-    bl_description = "找出当前帧中所有间距小于阈值的无人机对"
-
-    @classmethod
-    def poll(cls, context):
-        return (
-            context.scene is not None
-            and context.scene.drones_anim_safety.enabled
-            and bool(_get_drones(context.scene))
-        )
-
-    def execute(self, context):
-        scene = context.scene
-        state = _states.setdefault(scene.as_pointer(), _SceneState())
-        state.full_pairs_frame = scene.frame_current
-        _update(scene, context.evaluated_depsgraph_get())
-        count = len(state.result.close_pairs) if state.result else 0
-        self.report({"INFO"}, f"当前帧共有 {count} 对无人机距离不足")
-        return {"FINISHED"}
 
 
 class DroneAnimValidateTrajectoriesOperator(Operator):
@@ -322,6 +299,9 @@ class DroneAnimSafetyPanel(Panel):
         row = col.row()
         row.enabled = props.proximity_warning_enabled
         row.prop(props, "proximity_warning_target")
+        row = col.row()
+        row.enabled = props.proximity_warning_enabled
+        row.prop(props, "show_proximity_pair_lines", toggle=True)
 
         col.prop(props, "altitude_warning_enabled")
         row = col.row()
@@ -351,7 +331,6 @@ class DroneAnimSafetyPanel(Panel):
         row.prop(props, "yaw_rate_warning_threshold")
 
         layout.separator()
-        layout.operator(DroneAnimFullProximityCheckOperator.bl_idname)
         layout.operator(DroneAnimValidateTrajectoriesOperator.bl_idname)
 
 
@@ -393,6 +372,27 @@ def _draw_warnings():
         shader = gpu.shader.from_builtin("UNIFORM_COLOR")
         gpu.state.blend_set("ALPHA")
         try:
+            if props.proximity_warning_enabled and props.show_proximity_pair_lines:
+                vertices = []
+                for pair in result.close_pairs:
+                    endpoints = []
+                    for name in pair:
+                        point = positions.get(name)
+                        if point is None:
+                            break
+                        screen = location_3d_to_region_2d(
+                            context.region, context.region_data, Vector(point)
+                        )
+                        if screen is None:
+                            break
+                        endpoints.append(tuple(screen))
+                    if len(endpoints) == 2:
+                        vertices.extend(endpoints)
+                if vertices:
+                    shader.bind()
+                    shader.uniform_float("color", _WARNING_COLORS["proximity"])
+                    batch_for_shader(shader, "LINES", {"pos": vertices}).draw(shader)
+
             for category, names in result.warnings.items():
                 vertices = []
                 for name in names:

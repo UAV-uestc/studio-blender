@@ -76,7 +76,7 @@ def evaluate_frame(
     previous: Snapshot | None = None,
     earlier: Snapshot | None = None,
     *,
-    all_pairs: bool = False,
+    all_pairs: bool = True,
 ) -> Result:
     result = Result(frame=current.frame, drone_count=len(current.positions))
     if not current.positions:
@@ -98,26 +98,25 @@ def evaluate_frame(
     ]
     candidates.sort(key=lambda item: item[1][0])
     best_sq = float("inf")
-    threshold_sq = max(0.0, limits.proximity - 0.01) ** 2
-    full_threshold_sq = limits.proximity**2
+    threshold_sq = limits.proximity**2 if limits.proximity_enabled else 0.0
     for i, (name, point) in enumerate(candidates):
-        for other_name, other in candidates[i + 1 :]:
+        for j in range(i + 1, len(candidates)):
+            other_name, other = candidates[j]
             dx = other[0] - point[0]
-            if dx * dx > best_sq and (
-                not all_pairs or dx * dx >= full_threshold_sq
-            ):
+            # Keep searching past the closest pair to collect every warning pair.
+            if dx * dx > best_sq and (not all_pairs or dx * dx >= threshold_sq):
                 break
             distance_sq = sum((other[k] - point[k]) ** 2 for k in range(3))
             if distance_sq < best_sq:
                 best_sq = distance_sq
                 result.closest_pair = (name, other_name)
-            if all_pairs and distance_sq < full_threshold_sq:
+            if all_pairs and distance_sq < threshold_sq:
                 result.close_pairs.append((name, other_name))
     if result.closest_pair is not None:
         result.min_distance = best_sq**0.5
         if limits.proximity_enabled and best_sq < threshold_sq:
             result.warnings["proximity"] = set(result.closest_pair)
-    if all_pairs and result.close_pairs:
+    if result.close_pairs:
         result.warnings["proximity"] = {
             name for pair in result.close_pairs for name in pair
         }
