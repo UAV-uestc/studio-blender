@@ -132,8 +132,7 @@ motion allowance.
 Read the intended formation source mesh, its vertices, modifiers, shape keys,
 armature, object animation, and existing drone bindings through MCP.
 Read drone collections, identities, evaluated world transforms, parents,
-constraints, and drivers. Do not inspect or modify Skybrush storyboard data as
-part of this workflow.
+constraints, and drivers. 
 The current add-on checker inspects mesh objects directly in the `Drones`
 collection. Explicitly compare that set with the intended drone set; do not claim
 coverage for nested collections or objects the checker ignores.

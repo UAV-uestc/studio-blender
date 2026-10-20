@@ -55,7 +55,7 @@ class DroneAnimPanelProperties(PropertyGroup):
 class AttachDronesToVerticesOperator(Operator):
     bl_idname = "drones_anim.attach_drones_to_vertices"
     bl_label = "无人机附着顶点"
-    bl_description = "为场景中每个网格顶点创建无人机，并使其始终跟随顶点动画"
+    bl_description = "为网格顶点附着无人机；已有附着时删除所有无人机，再次点击重新附着"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -70,6 +70,44 @@ class AttachDronesToVerticesOperator(Operator):
         existing_drones = (
             set(existing_collection.all_objects) if existing_collection else set()
         )
+        attachments = [
+            constraint
+            for drone in existing_drones
+            for constraint in drone.constraints
+            if drone.type == "MESH"
+            and constraint.type == "COPY_LOCATION"
+            and constraint.name == "Drone Anim Vertex"
+            and constraint.target is not None
+            and constraint.subtarget
+        ]
+        if attachments:
+            previous_mode = context.mode
+            if previous_mode == "EDIT_MESH":
+                bpy.ops.object.mode_set(mode="OBJECT")
+            try:
+                groups = {
+                    (constraint.target, constraint.subtarget)
+                    for constraint in attachments
+                }
+                drones = [obj for obj in existing_drones if obj.type == "MESH"]
+                meshes = {drone.data for drone in drones}
+                for drone in drones:
+                    bpy.data.objects.remove(drone, do_unlink=True)
+                for obj, group_name in groups:
+                    group = obj.vertex_groups.get(group_name)
+                    if group is not None:
+                        obj.vertex_groups.remove(group)
+                for mesh in meshes:
+                    if mesh.users == 0:
+                        bpy.data.meshes.remove(mesh)
+                self.report(
+                    {"INFO"}, f"已删除 {len(drones)} 架无人机，再次点击可重新附着"
+                )
+            finally:
+                if previous_mode == "EDIT_MESH" and context.active_object is not None:
+                    bpy.ops.object.mode_set(mode="EDIT")
+            return {"FINISHED"}
+
         sources = [
             obj
             for obj in scene.objects
@@ -87,28 +125,14 @@ class AttachDronesToVerticesOperator(Operator):
             bpy.ops.object.mode_set(mode="OBJECT")
 
         try:
-            # Only drones created by this operator count as existing bindings.
-            bindings = {
-                (constraint.target, drone.get("drones_anim_vertex_index"))
-                for drone in existing_drones
-                for constraint in drone.constraints
-                if constraint.type == "COPY_LOCATION"
-                and constraint.name == "Drone Anim Vertex"
-                and constraint.target is not None
-                and constraint.subtarget
-            }
             pending_by_object = {
-                obj: [
-                    vertex.index
-                    for vertex in obj.data.vertices
-                    if (obj, vertex.index) not in bindings
-                ]
+                obj: [vertex.index for vertex in obj.data.vertices]
                 for obj in sources
             }
             count = sum(len(indices) for indices in pending_by_object.values())
             if not count:
-                self.report({"INFO"}, "所有网格顶点均已附着无人机")
-                return {"FINISHED"}
+                self.report({"WARNING"}, "场景中没有可附着的网格顶点")
+                return {"CANCELLED"}
 
             depsgraph = context.evaluated_depsgraph_get()
             positions_by_object = {}

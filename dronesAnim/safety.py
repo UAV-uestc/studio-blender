@@ -137,6 +137,11 @@ def _settings_changed(self, context):
         _update(context.scene, context.evaluated_depsgraph_get())
 
 
+def _display_changed(self, context):
+    # Display toggles must not evaluate the scene from an RNA update callback.
+    _redraw()
+
+
 class DroneAnimSafetyProperties(PropertyGroup):
     enabled: BoolProperty(
         name="启用安全检查", default=True, update=_settings_changed
@@ -162,7 +167,7 @@ class DroneAnimSafetyProperties(PropertyGroup):
     show_proximity_pair_lines: BoolProperty(
         name="显示距离警告无人机对连线",
         description="用红色连线显示所有间距小于最小距离的无人机对",
-        default=False, update=_settings_changed,
+        default=False, update=_display_changed,
     )
     altitude_warning_enabled: BoolProperty(
         name="高度警告", default=True, update=_settings_changed
@@ -362,7 +367,7 @@ def _draw_warnings():
             messages.append((category, item))
     if not messages:
         return
-    if result and result.warning_count:
+    if result and result.warning_count and state.snapshots:
         positions = state.snapshots[-1].positions
         size = props.marker_size
         categories_by_drone = {}
@@ -372,7 +377,11 @@ def _draw_warnings():
         shader = gpu.shader.from_builtin("UNIFORM_COLOR")
         gpu.state.blend_set("ALPHA")
         try:
-            if props.proximity_warning_enabled and props.show_proximity_pair_lines:
+            if (
+                props.proximity_warning_enabled
+                and props.show_proximity_pair_lines
+                and result.close_pairs
+            ):
                 vertices = []
                 for pair in result.close_pairs:
                     endpoints = []
