@@ -1,6 +1,6 @@
 ---
 name: drone-animation-orchestration
-description: Create one formation and its animated presentation in Drone Anim through Blender MCP using live safety limits. Use for single-formation animation. Not for Skybrush show orchestration.
+description: Refine the existing models mesh, and create one formation and its animated presentation in Drone Anim through Blender MCP using live safety limits. Use for single-formation animation. Not for Skybrush show orchestration.
 ---
 
 # Single Formation Animation
@@ -16,6 +16,8 @@ workflow instead of silently adding them.
 Use Blender MCP for live scene inspection, animation creation, and verification.
 Acquire safety settings before planning or changing animation. Never reuse limits
 from a previous conversation as current configuration.
+
+You must implement the animiation on the original 3D model, not to a copy.
 
 ## 1. Acquire Live Safety Configuration
 
@@ -133,6 +135,14 @@ Read the intended formation source mesh, its vertices, modifiers, shape keys,
 armature, object animation, and existing drone bindings through MCP.
 Read drone collections, identities, evaluated world transforms, parents,
 constraints, and drivers. 
+
+At the beginning, refine the existing models mesh to ensure their vertices' clearance 
+is at least the minimum distance, and can insert some vertices at the faces with sparse
+vertices, remove vertices at the faces with dense vertices, to keep 
+the vertices distribution in mesh as even as possible, so a promising formation can be created.
+Last but not least, be mind of the vertices around the joints of the mesh, and more 
+clearance is needed around them to avoid collision as joints rotating during animation.
+
 The current add-on checker inspects mesh objects directly in the `Drones`
 collection. Explicitly compare that set with the intended drone set; do not claim
 coverage for nested collections or objects the checker ignores.

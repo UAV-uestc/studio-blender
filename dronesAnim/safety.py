@@ -285,7 +285,7 @@ class DroneAnimSafetyPanel(Panel):
     bl_parent_id = "OBJECT_PT_drones_anim_panel"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "Drone Anim"
+    bl_category = "无人机动画"
 
     def draw_header(self, context):
         self.layout.prop(context.scene.drones_anim_safety, "enabled", text="")

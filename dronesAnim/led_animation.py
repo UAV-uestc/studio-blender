@@ -31,8 +31,8 @@ def color_curves(drone):
     return [curve for curve in curves if curve.data_path == "color"]
 
 
-def insert_color(drone, color, frame, *, step, frame_start):
-    """Keep Apply abrupt; Fade interpolates from the previous color key."""
+def insert_color(drone, color, frame, *, step, frame_start, hold=False):
+    """Keep Apply abrupt; optionally hold the new color until the next key."""
     # A duplicated object may share an action with its source.
     animation = drone.animation_data
     if animation and animation.action and animation.action.users > 1:
@@ -51,7 +51,9 @@ def insert_color(drone, color, frame, *, step, frame_start):
     for curve in color_curves(drone):
         for point in curve.keyframe_points:
             if point.co.x in frames:
-                point.interpolation = "LINEAR"
+                point.interpolation = (
+                    "CONSTANT" if hold and point.co.x == frame else "LINEAR"
+                )
                 point.handle_left.y = point.co.y
                 point.handle_right.y = point.co.y
         curve.update()

@@ -393,7 +393,7 @@ class DroneMotionAnalysisPanel(Panel):
     bl_order = 1
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "Drone Anim"
+    bl_category = "无人机动画"
 
     def draw(self, context):
         """Draw analysis controls, progress and cached result details."""

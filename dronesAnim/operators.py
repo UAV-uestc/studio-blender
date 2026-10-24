@@ -236,10 +236,10 @@ class ExportMATOperator(Operator, ExportHelper):
 
 class DroneAnimPanel(Panel):
     bl_idname = "OBJECT_PT_drones_anim_panel"
-    bl_label = "Drone Animations"
+    bl_label = "无人机动画"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "Drone Anim"
+    bl_category = "无人机动画"
 
     def draw(self, context: Context) -> None:
         layout = self.layout
