@@ -1,0 +1,19 @@
+schema_version = "1.0.0"
+
+id = "claude_chat"
+version = "2.2.0"
+name = "LLM Chat for Blender"
+tagline = "Chat with an AI that models game assets, 3D prints and BIM"
+maintainer = "raf"
+type = "add-on"
+
+tags = ["Modeling", "Pipeline", "Material", "Rigging", "Import-Export"]
+
+blender_version_min = "4.2.0"
+license = ["SPDX:GPL-3.0-or-later"]
+copyright = ["2026 raf"]
+
+[permissions]
+network = "Runs Claude Code, or calls the AI provider you choose with your key; downloads Claude Code's installer if you ask"
+files = "Read reference files, write .glb/.3mf/.stl/.ifc exports, run an installed slicer"
+clipboard = "Copy chat messages and paste reference images"
