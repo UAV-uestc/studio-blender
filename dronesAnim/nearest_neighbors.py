@@ -4,7 +4,49 @@ Based on ``sbstudio.math.nearest_neighbors``. Indices are retained so that
 coincident points still identify distinct drones.
 """
 
+import logging
+
 import numpy as np
+
+_numba_kernels = None
+_numba_attempted = False
+_numba_error = None
+
+
+def initialize_numba_backend():
+    """Prewarm optional acceleration once; never require it for safety checks."""
+    global _numba_kernels, _numba_attempted, _numba_error
+    if _numba_attempted:
+        return _numba_kernels is not None
+    _numba_attempted = True
+    try:
+        from .nearest_neighbors_numba import build_kernels
+
+        _numba_kernels = build_kernels()
+        _numba_error = None
+    except Exception as error:
+        _disable_numba(error)
+    return _numba_kernels is not None
+
+
+def _disable_numba(error):
+    """Disable a failed optional compiler and use NumPy for subsequent calls."""
+    global _numba_kernels, _numba_attempted, _numba_error
+    _numba_kernels = None
+    _numba_attempted = True
+    _numba_error = f"{type(error).__name__}: {error}"
+    logging.getLogger(__name__).info("Using NumPy proximity backend: %s", _numba_error)
+
+
+def register():
+    initialize_numba_backend()
+
+
+def unregister():
+    global _numba_kernels, _numba_attempted, _numba_error
+    _numba_kernels = None
+    _numba_attempted = False
+    _numba_error = None
 
 
 def _reorder_along_principal_axis(points):
@@ -72,6 +114,16 @@ def find_nearest_neighbors(points, order=None, axis=None):
         return None, None
     if order is None or axis is None:
         order, axis = _reorder_along_principal_axis(points)
+    if _numba_kernels is not None and np.isfinite(points).all():
+        try:
+            first, second, distance_sq = _numba_kernels[0](
+                np.ascontiguousarray(points, dtype=float),
+                np.ascontiguousarray(order, dtype=np.int64),
+                int(axis),
+            )
+            return (int(first), int(second)), float(distance_sq)**0.5
+        except Exception as error:
+            _disable_numba(error)
     pair, distance_sq = _nearest_neighbors_divide_and_conquer_step(points, order, axis)
     return pair, distance_sq**0.5
 
@@ -89,6 +141,17 @@ def find_all_point_pairs_closer_than(points, threshold, order=None, axis=None):
         coordinates, np.nextafter(coordinates + threshold, np.inf), side="right"
     )
     threshold_sq = threshold**2
+    if _numba_kernels is not None and np.isfinite(points).all():
+        try:
+            pairs = _numba_kernels[1](
+                np.ascontiguousarray(points, dtype=float),
+                np.ascontiguousarray(order, dtype=np.int64),
+                np.ascontiguousarray(ends, dtype=np.int64),
+                float(threshold_sq),
+            )
+            return sorted(map(tuple, pairs.tolist()))
+        except Exception as error:
+            _disable_numba(error)
     pairs = []
     for i, end in enumerate(ends):
         if end <= i + 1:
