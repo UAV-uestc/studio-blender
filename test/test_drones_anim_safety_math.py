@@ -3,12 +3,18 @@
 import importlib.util
 import random
 import sys
+import types
 import unittest
+from math import dist
 from pathlib import Path
 
-
 path = Path(__file__).resolve().parents[1] / "dronesAnim" / "safety_math.py"
-spec = importlib.util.spec_from_file_location("drones_anim_safety_math", path)
+package = types.ModuleType("drones_anim_safety_test")
+package.__path__ = [str(path.parent)]
+sys.modules[package.__name__] = package
+spec = importlib.util.spec_from_file_location(
+    "drones_anim_safety_test.safety_math", path
+)
 module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
@@ -89,13 +95,80 @@ class TestSafetyMath(unittest.TestCase):
         result = evaluate_frame(
             Snapshot(1, points, {}), Limits(proximity_target="ALL"), 24
         )
-        from math import dist
-
         expected = min(
             dist(a, b) for i, a in enumerate(points.values())
             for b in list(points.values())[i + 1:]
         )
         self.assertAlmostEqual(result.min_distance, expected)
+
+    def test_proximity_matches_brute_force_for_varied_formations(self):
+        rng = random.Random(73)
+        formations = [
+            [(0.0, i * 0.7, 3.0) for i in range(140)],
+            [(i * 0.7, 0.0, 3.0) for i in range(140)],
+            [(0.0, 0.0, i * 0.7) for i in range(140)],
+            [(rng.uniform(-8, 8), rng.uniform(-8, 8), rng.uniform(-8, 8))
+             for _ in range(140)],
+            [(0.0, 0.0, 3.0)] * 110,
+        ]
+        for formation in formations:
+            with self.subTest(formation=formation[:2]):
+                points = {str(i): point for i, point in enumerate(formation)}
+                result = evaluate_frame(
+                    Snapshot(1, points, {}),
+                    Limits(proximity_target="ALL", proximity=3.0),
+                    24,
+                )
+                expected_pairs = {
+                    frozenset((str(i), str(j)))
+                    for i, point in enumerate(formation)
+                    for j in range(i + 1, len(formation))
+                    if dist(point, formation[j]) < 3.0
+                }
+                self.assertEqual(
+                    {frozenset(pair) for pair in result.close_pairs}, expected_pairs
+                )
+                self.assertEqual(len(result.close_pairs), len(expected_pairs))
+                self.assertEqual(
+                    result.warnings.get("proximity", set()),
+                    set().union(*expected_pairs),
+                )
+                self.assertAlmostEqual(
+                    result.min_distance,
+                    min(dist(point, formation[j])
+                        for i, point in enumerate(formation)
+                        for j in range(i + 1, len(formation))),
+                )
+
+    def test_strict_threshold_and_closest_only_mode(self):
+        positions = {
+            "a": (0.0, 0.0, 3.0),
+            "b": (3.0, 0.0, 3.0),
+            "c": (5.0, 0.0, 3.0),
+        }
+        snapshot = Snapshot(1, positions, {})
+        result = evaluate_frame(snapshot, Limits(), 24)
+        self.assertEqual(result.close_pairs, [("b", "c")])
+        closest_only = evaluate_frame(snapshot, Limits(), 24, all_pairs=False)
+        self.assertEqual(closest_only.close_pairs, [])
+        self.assertEqual(closest_only.warnings["proximity"], {"b", "c"})
+        disabled = evaluate_frame(
+            snapshot, Limits(proximity_enabled=False), 24
+        )
+        self.assertEqual(disabled.min_distance, 2.0)
+        self.assertEqual(disabled.close_pairs, [])
+        self.assertNotIn("proximity", disabled.warnings)
+        zero = evaluate_frame(snapshot, Limits(proximity=0.0), 24)
+        self.assertEqual(zero.close_pairs, [])
+        self.assertNotIn("proximity", zero.warnings)
+
+    def test_closest_pair_crosses_divide_and_conquer_split(self):
+        positions = {str(i): (i * 10.0, 0.0, 3.0) for i in range(140)}
+        positions["70"] = (690.25, 0.0, 3.0)
+        result = evaluate_frame(Snapshot(1, positions, {}), Limits(), 24)
+        self.assertEqual(result.closest_pair, ("69", "70"))
+        self.assertEqual(result.min_distance, 0.25)
+        self.assertEqual(result.close_pairs, [("69", "70")])
 
     def test_warning_messages_include_each_active_category(self):
         result = Result(
