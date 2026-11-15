@@ -18,7 +18,7 @@ from bpy.props import (
 )
 from bpy.types import Image, Operator, Panel, PropertyGroup, Scene
 
-from .led_animation import get_drones, insert_color, update_emission
+from .led_animation import edit_base_colors, get_drones, insert_color, update_emission
 from .uv_sampling import sample_attached_colors
 
 _draw_handle = None
@@ -37,6 +37,13 @@ def _redraw():
 
 
 def _visualization_changed(self, context):
+    scene = self.id_data
+    if hasattr(scene, "drones_anim_light_effects"):
+        from .light_effects.runtime import invalidate, update_scene
+
+        invalidate(scene)
+        scene.update_tag()
+        update_scene(scene, context.evaluated_depsgraph_get())
     for area in _views():
         shading = area.spaces.active.shading
         if self.visualization == "MATERIALS":
@@ -219,24 +226,25 @@ class DroneAnimApplyLEDColorsOperator(Operator):
                 else:
                     axis = "XYZ".index(self.gradient_mode)
                     drones.sort(key=lambda drone: positions[drone][axis])
-        for index, drone in enumerate(drones):
-            if self.color == "PRIMARY":
-                color = self.primary_color
-            elif self.color == "SECONDARY":
-                color = self.secondary_color
-            else:
-                ratio = index / (len(drones) - 1) if len(drones) > 1 else 0.5
-                color = tuple(
-                    a * (1 - ratio) + b * ratio
-                    for a, b in zip(self.primary_color, self.secondary_color)
+        with edit_base_colors(context.scene):
+            for index, drone in enumerate(drones):
+                if self.color == "PRIMARY":
+                    color = self.primary_color
+                elif self.color == "SECONDARY":
+                    color = self.secondary_color
+                else:
+                    ratio = index / (len(drones) - 1) if len(drones) > 1 else 0.5
+                    color = tuple(
+                        a * (1 - ratio) + b * ratio
+                        for a, b in zip(self.primary_color, self.secondary_color)
+                    )
+                insert_color(
+                    drone,
+                    color,
+                    context.scene.frame_current,
+                    step=not self.fade,
+                    frame_start=context.scene.frame_start,
                 )
-            insert_color(
-                drone,
-                color,
-                context.scene.frame_current,
-                step=not self.fade,
-                frame_start=context.scene.frame_start,
-            )
         _redraw()
         return {"FINISHED"}
 
@@ -274,15 +282,16 @@ class DroneAnimSampleUVColorsOperator(Operator):
                 uv_map=props.uv_map,
                 repeat=props.uv_extension == "REPEAT",
             )
-            for drone, color in colors:
-                insert_color(
-                    drone,
-                    color,
-                    frame,
-                    step=False,
-                    frame_start=scene.frame_start,
-                    hold=True,
-                )
+            with edit_base_colors(scene):
+                for drone, color in colors:
+                    insert_color(
+                        drone,
+                        color,
+                        frame,
+                        step=False,
+                        frame_start=scene.frame_start,
+                        hold=True,
+                    )
         except (ValueError, RuntimeError) as exc:
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
@@ -352,6 +361,22 @@ class DroneAnimLEDControlPanel(Panel):
         box.operator(DroneAnimSampleUVColorsOperator.bl_idname, icon="KEY_HLT")
 
 
+def marker_samples(scene, depsgraph):
+    """Use the same final colors as material display and export."""
+    from .light_effects.runtime import final_colors
+
+    drones, colors, _errors = final_colors(scene, depsgraph)
+    visible = [
+        (drone, color) for drone, color in zip(drones, colors)
+        if drone.visible_get()
+    ]
+    positions = [
+        tuple(drone.evaluated_get(depsgraph).matrix_world.translation)
+        for drone, _color in visible
+    ]
+    return positions, [tuple(color) for _drone, color in visible]
+
+
 def _draw_markers():
     import gpu
     from gpu_extras.batch import batch_for_shader
@@ -364,18 +389,16 @@ def _draw_markers():
     if props.visualization != "MARKERS" or not context.space_data.overlay.show_overlays:
         return
     graph = context.evaluated_depsgraph_get()
-    drones = [
-        drone.evaluated_get(graph) for drone in get_drones(scene) if drone.visible_get()
-    ]
-    if not drones:
+    positions, colors = marker_samples(scene, graph)
+    if not positions:
         return
     shader = gpu.shader.from_builtin("POINT_FLAT_COLOR")
     batch = batch_for_shader(
         shader,
         "POINTS",
         {
-            "pos": [tuple(drone.matrix_world.translation) for drone in drones],
-            "color": [tuple(drone.color) for drone in drones],
+            "pos": positions,
+            "color": colors,
         },
     )
     blend, depth = gpu.state.blend_get(), gpu.state.depth_test_get()

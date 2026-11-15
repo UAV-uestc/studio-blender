@@ -63,6 +63,9 @@ license = [
 # files = "Import/export FBX from/to disk"
 # clipboard = "Copy and paste bone transforms"
 
+[permissions]
+files = "Import effects and load approved custom functions"
+
 # Optional: build settings.
 # https://docs.blender.org/manual/en/dev/advanced/extensions/command_line_arguments.html#command-line-args-extension-build
 # [build]
