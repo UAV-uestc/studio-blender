@@ -107,3 +107,96 @@ uv run --with pillow python etc/scripts/render_light_effect_preset_gifs.py \
   --drone-count 100 \
   --draw-connector-line
 ```
+
+## Non-numba branch integration
+
+The `merge/non-numba` integration combines these source tips:
+
+- `main`: `0f2a048`
+- `led`: `554f32a`
+- `feat/video-led-projection`: `29e7d35`
+
+The `numba` branch is excluded. The lighting sidebar now has two panels:
+
+- **LED**: ordinary primary/secondary color picking, color keyframes and UV sampling.
+- **灯效 (Effects)**: one list containing video projection, ramps, images, presets
+  and Python effects. Add either a procedural or video row, then use the same
+  enable, duplicate, remove and reorder actions. Upper rows overlay lower rows,
+  so videos and procedural effects can be interleaved. Drag the six-dot grip or
+  use the arrow buttons to change priority. Hover a row for its full name and
+  inclusive `[start-end]` frame range; the range no longer takes a separate column.
+  The question-mark button explains priority. The master switch, timing,
+  fade, influence and blend mode apply to both kinds of effect.
+
+Markers, evaluated material colors, and MAT samples share the final-color
+evaluator. Invalid effects are reported in preview and stop MAT sampling;
+sampling restores the original frame on both success and failure.
+
+Older scene video settings migrate into the shared list on load/registration.
+Older ascending-priority lists are reversed while preserving their visual output;
+legacy videos retain their former priority above procedural effects. Migrated scene
+Action-slot/NLA F-Curves and drivers retain their video property bindings.
+Legacy RNA fields remain available only for migration. JSON includes video
+projection settings and asset references; missing video textures/target objects
+are reported and imported disabled rather than silently widening their scope.
+Video-specific JSON rows are a DroneAnim extension, not a Skybrush interchange
+format guarantee. New JSON writes `droneAnim.listOrder: TOP_FIRST`; older JSON
+without this field is interpreted as bottom-first and converted on import.
+
+Run the isolated integration check on Windows:
+
+```powershell
+& 'C:/Program Files/Blender Foundation/Blender 5.2/blender.exe' --background --factory-startup --python-exit-code 1 --python test/blender_non_numba_merge_smoke.py
+& 'C:/Program Files/Blender Foundation/Blender 5.2/blender.exe' --background --factory-startup --python-exit-code 1 --python test/blender_unified_lights_smoke.py
+# In a Python environment containing NumPy, SciPy and pytest:
+python test/verify_non_numba_mat.py
+$env:PYTHONPATH = 'src/modules'
+python -m pytest test
+```
+
+The Blender check uses synthetic decoded video pixels to verify projection,
+composition, target scope, frame boundaries, preview/sample consistency, scene
+restoration, deterministic samples, and registration lifecycle. It writes two
+MAT fixtures and a JSON report under the ignored `tmp/non-numba-merge/` folder;
+the separate SciPy reader checks their keys, dtypes, dimensions, row order,
+world positions, finite values, endpoints and colors (absolute tolerance 1e-6).
+
+Native movie decoding and interactive video export still require Blender's GUI
+and are not established by this background test. The current legacy MAT schema
+is preserved (`x`, `y`, `z`, `r`, `g`, `b`: double matrices, drones by samples;
+`Qn`: zero-based double row indices). This merge does not migrate it to the
+planned canonical `t`/`id`/`xyz`/`rgb` contract or establish flight safety.
+
+Earlier validation on Blender 5.2.1 LTS: the isolated integration smoke test and independent
+SciPy MAT round trip passed; the repository suite passed all 131 tests. The additional unified-list smoke test covers mixed reordering,
+blend strength, enable/disable, duplicate/delete, video looping, JSON round trips,
+invalid-input rejection, two-panel draw paths, idempotent legacy migration and
+keyframe path conversion. The safety
+math test loader now provides package context for its relative imports without
+importing Blender. Changed Python sources also passed `py_compile`.
+
+These results predate the final grip layout and frame-range tooltip edits.
+The final interactive drag/Undo behavior and narrow-sidebar layout have not
+been validated; no further tests were run after the request to stop validation.
+
+
+### Skybrush disable/reload crash fix
+
+Skybrush must remove `Scene.skybrush` and `Object.skybrush` before unregistering
+its PropertyGroup types. Leaving those RNA definitions behind can crash native
+RNA path lookup later, including when another add-on displays a property tooltip.
+The source add-on entrypoint now removes both definitions after stopping their
+consumers and before unregistering types. Stored scene/object settings survive
+re-enabling the add-on.
+
+The lifecycle regression checks enable/disable cycles, coexistence with
+DroneAnim, property-path lookup after teardown, and settings retention:
+
+```powershell
+& 'C:/Program Files/Blender Foundation/Blender 5.2/blender.exe' --background --factory-startup --python-exit-code 1 --python test/blender_skybrush_lifecycle_smoke.py
+```
+
+The source plugin requires `natsort`. If it is already bundled in a separate
+Skybrush installation, pass `-- --deps-dir <vendor/skybrush-directory>` to this
+isolated test. The standalone DroneAnim ZIP does not contain the Skybrush
+entrypoint; an older separately installed Skybrush also needs this teardown fix.

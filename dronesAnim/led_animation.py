@@ -1,6 +1,13 @@
 """Independent object-color animation and LED material helpers."""
 
 
+def edit_base_colors(scene):
+    """Batch key edits before reevaluating procedural LED presentation."""
+    from .light_effects.runtime import base_color_edit
+
+    return base_color_edit(scene)
+
+
 def get_drones(scene):
     """Only manage this add-on's drones, including nested collections."""
     return [

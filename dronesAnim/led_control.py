@@ -9,19 +9,27 @@ import bpy
 from bpy.app.handlers import persistent
 from bpy.props import (
     BoolProperty,
+    CollectionProperty,
     EnumProperty,
     FloatProperty,
     FloatVectorProperty,
     IntProperty,
+    IntVectorProperty,
     PointerProperty,
     StringProperty,
 )
-from bpy.types import Image, Operator, Panel, PropertyGroup, Scene
+from bpy.types import Image, Object, Operator, Panel, PropertyGroup, Scene, Texture
 
-from .led_animation import get_drones, insert_color, update_emission
+from .led_animation import edit_base_colors, get_drones, insert_color, update_emission
+from .video_projection import (
+    clear_video_frame,
+    ensure_video_source_fps,
+    video_natural_end,
+)
 from .uv_sampling import sample_attached_colors
 
 _draw_handle = None
+_video_preview_errors = {}
 
 
 def _views():
@@ -37,6 +45,13 @@ def _redraw():
 
 
 def _visualization_changed(self, context):
+    scene = self.id_data
+    if hasattr(scene, "drones_anim_light_effects"):
+        from .light_effects.runtime import invalidate, update_scene
+
+        invalidate(scene)
+        scene.update_tag()
+        update_scene(scene, context.evaluated_depsgraph_get())
     for area in _views():
         shading = area.spaces.active.shading
         if self.visualization == "MATERIALS":
@@ -53,6 +68,37 @@ def _emission_changed(self, context):
     _redraw()
 
 
+def _video_changed(self, _context):
+    from .light_effects.runtime import invalidate
+
+    invalidate(self.id_data)
+    self.id_data.update_tag()
+    _video_preview_errors.pop(self.id_data.session_uid, None)
+    _redraw()
+
+
+def _video_enabled_changed(self, context):
+    if self.video_enabled:
+        self.id_data.drones_anim_led.visualization = "MARKERS"
+    _video_changed(self, context)
+
+
+def _video_end_get(effect):
+    if effect.video_end_locked:
+        return video_natural_end(effect)
+    return effect.get("video_end", video_natural_end(effect))
+
+
+def _video_end_set(effect, value):
+    effect["video_end"] = value
+
+
+def _video_end_lock_changed(effect, context):
+    if not effect.video_end_locked:
+        effect["video_end"] = video_natural_end(effect)
+    _video_changed(effect, context)
+
+
 def _color_property(name, default=(1.0, 1.0, 1.0)):
     return FloatVectorProperty(
         name=name,
@@ -65,7 +111,51 @@ def _color_property(name, default=(1.0, 1.0, 1.0)):
     )
 
 
+class DroneAnimVideoTarget(PropertyGroup):
+    drone: PointerProperty(type=Object)
+
+
+class DroneAnimVideoEffect(PropertyGroup):
+    name: StringProperty(name="灯效名称", default="视频灯效")
+    video_enabled: BoolProperty(
+        name="启用灯效",
+        update=_video_enabled_changed,
+    )
+    video_start: IntProperty(
+        name="开始帧", description="视频第一张画面对应的场景帧", default=1,
+        update=_video_changed,
+    )
+    video_end: IntProperty(
+        name="结束帧", description="视频灯效生效的最后一帧（含）",
+        get=_video_end_get, set=_video_end_set, update=_video_changed,
+    )
+    video_end_locked: BoolProperty(
+        name="锁定到视频结束帧",
+        description="锁定时播放一轮。解锁后可截短或循环至指定结束帧",
+        default=True,
+        update=_video_end_lock_changed,
+    )
+    video_texture: PointerProperty(type=Texture, options={"HIDDEN"})
+    video_duration: IntProperty(options={"HIDDEN"}, min=0)
+    video_view_captured: BoolProperty(options={"HIDDEN"})
+    video_view_matrix: FloatVectorProperty(size=16, options={"HIDDEN"})
+    video_viewport_size: IntVectorProperty(size=2, options={"HIDDEN"}, min=1)
+    video_targets: CollectionProperty(type=DroneAnimVideoTarget)
+
+
 class DroneAnimLEDProperties(PropertyGroup):
+    video_effects: CollectionProperty(type=DroneAnimVideoEffect)
+    video_effect_index: IntProperty(
+        default=0, min=0, options={"HIDDEN"},
+    )
+    # Retain the previous scene properties until older files have been migrated.
+    video_enabled: BoolProperty(options={"HIDDEN"})
+    video_start: IntProperty(default=1, options={"HIDDEN"})
+    video_texture: PointerProperty(type=Texture, options={"HIDDEN"})
+    video_duration: IntProperty(options={"HIDDEN"}, min=0)
+    video_view_captured: BoolProperty(options={"HIDDEN"})
+    video_view_matrix: FloatVectorProperty(size=16, options={"HIDDEN"})
+    video_viewport_size: IntVectorProperty(size=2, options={"HIDDEN"}, min=1)
     visualization: EnumProperty(
         name="显示方式",
         description="选择无人机灯光在三维视口中的显示方式",
@@ -98,6 +188,7 @@ class DroneAnimLEDProperties(PropertyGroup):
         default=1,
         update=_emission_changed,
     )
+
     uv_image: PointerProperty(
         name="纹理图像",
         type=Image,
@@ -219,24 +310,25 @@ class DroneAnimApplyLEDColorsOperator(Operator):
                 else:
                     axis = "XYZ".index(self.gradient_mode)
                     drones.sort(key=lambda drone: positions[drone][axis])
-        for index, drone in enumerate(drones):
-            if self.color == "PRIMARY":
-                color = self.primary_color
-            elif self.color == "SECONDARY":
-                color = self.secondary_color
-            else:
-                ratio = index / (len(drones) - 1) if len(drones) > 1 else 0.5
-                color = tuple(
-                    a * (1 - ratio) + b * ratio
-                    for a, b in zip(self.primary_color, self.secondary_color)
+        with edit_base_colors(context.scene):
+            for index, drone in enumerate(drones):
+                if self.color == "PRIMARY":
+                    color = self.primary_color
+                elif self.color == "SECONDARY":
+                    color = self.secondary_color
+                else:
+                    ratio = index / (len(drones) - 1) if len(drones) > 1 else 0.5
+                    color = tuple(
+                        a * (1 - ratio) + b * ratio
+                        for a, b in zip(self.primary_color, self.secondary_color)
+                    )
+                insert_color(
+                    drone,
+                    color,
+                    context.scene.frame_current,
+                    step=not self.fade,
+                    frame_start=context.scene.frame_start,
                 )
-            insert_color(
-                drone,
-                color,
-                context.scene.frame_current,
-                step=not self.fade,
-                frame_start=context.scene.frame_start,
-            )
         _redraw()
         return {"FINISHED"}
 
@@ -274,15 +366,16 @@ class DroneAnimSampleUVColorsOperator(Operator):
                 uv_map=props.uv_map,
                 repeat=props.uv_extension == "REPEAT",
             )
-            for drone, color in colors:
-                insert_color(
-                    drone,
-                    color,
-                    frame,
-                    step=False,
-                    frame_start=scene.frame_start,
-                    hold=True,
-                )
+            with edit_base_colors(scene):
+                for drone, color in colors:
+                    insert_color(
+                        drone,
+                        color,
+                        frame,
+                        step=False,
+                        frame_start=scene.frame_start,
+                        hold=True,
+                    )
         except (ValueError, RuntimeError) as exc:
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
@@ -295,9 +388,48 @@ class DroneAnimSampleUVColorsOperator(Operator):
         return {"FINISHED"}
 
 
+def _migrate_video_effect(props):
+    if props.video_effects or not (props.video_texture or props.video_duration or props.video_view_captured):
+        return
+    effect = props.video_effects.add()
+    effect.video_start = props.video_start
+    effect.video_texture = props.video_texture
+    effect.video_duration = props.video_duration
+    effect.video_view_captured = props.video_view_captured
+    effect.video_view_matrix = tuple(props.video_view_matrix)
+    effect.video_viewport_size = tuple(props.video_viewport_size)
+    effect["video_enabled"] = props.video_enabled
+    if isinstance(effect.video_texture, bpy.types.ImageTexture) and effect.video_texture.image:
+        effect.name = effect.video_texture.image.name
+    props.video_texture = None
+    props.video_duration = 0
+    props.video_view_captured = False
+    props.video_enabled = False
+
+
+def _migrate_loaded_video_effects():
+    for scene in bpy.data.scenes:
+        props = scene.drones_anim_led
+        _migrate_video_effect(props)
+        for effect in props.video_effects:
+            if "video_end" in effect and "video_end_locked" not in effect:
+                # Older ranges beyond the source duration used to stop after one pass.
+                old_natural_end = effect.video_start + max(0, effect.video_duration - 1)
+                effect["video_end_locked"] = effect["video_end"] >= old_natural_end
+            if effect.video_texture is not None:
+                try:
+                    ensure_video_source_fps(effect.video_texture)
+                except (OSError, RuntimeError, ValueError):
+                    # The user can reselect missing or unsupported media from the panel.
+                    pass
+        from .light_effects.migration import migrate_scene
+
+        migrate_scene(scene)
+
+
 class DroneAnimLEDControlPanel(Panel):
     bl_idname = "OBJECT_PT_drones_anim_led_control"
-    bl_label = "灯光控制"
+    bl_label = "LED"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "灯光控制"
@@ -339,6 +471,7 @@ class DroneAnimLEDControlPanel(Panel):
                 operator.color, operator.fade = color, fade
                 operator.primary_color = props.primary_color
                 operator.secondary_color = props.secondary_color
+
         box = layout.box()
         box.label(text="UV 纹理采样", icon="TEXTURE")
         box.template_ID(props, "uv_image", open="image.open")
@@ -350,6 +483,26 @@ class DroneAnimLEDControlPanel(Panel):
         box.label(text="UV 贴图留空：使用活动渲染 UV")
         box.label(text="UV 接缝：使用第一个相邻面")
         box.operator(DroneAnimSampleUVColorsOperator.bl_idname, icon="KEY_HLT")
+
+
+def marker_samples(scene, depsgraph):
+    """Use the same final colors as material display and export."""
+    from .light_effects.runtime import final_colors
+
+    drones, colors, errors = final_colors(scene, depsgraph)
+    if errors:
+        _video_preview_errors[scene.session_uid] = "; ".join(errors)
+    else:
+        _video_preview_errors.pop(scene.session_uid, None)
+    visible = [
+        (drone, color) for drone, color in zip(drones, colors)
+        if drone.visible_get()
+    ]
+    positions = [
+        tuple(drone.evaluated_get(depsgraph).matrix_world.translation)
+        for drone, _color in visible
+    ]
+    return positions, [tuple(color) for _drone, color in visible]
 
 
 def _draw_markers():
@@ -364,18 +517,16 @@ def _draw_markers():
     if props.visualization != "MARKERS" or not context.space_data.overlay.show_overlays:
         return
     graph = context.evaluated_depsgraph_get()
-    drones = [
-        drone.evaluated_get(graph) for drone in get_drones(scene) if drone.visible_get()
-    ]
-    if not drones:
+    positions, colors = marker_samples(scene, graph)
+    if not positions:
         return
     shader = gpu.shader.from_builtin("POINT_FLAT_COLOR")
     batch = batch_for_shader(
         shader,
         "POINTS",
         {
-            "pos": [tuple(drone.matrix_world.translation) for drone in drones],
-            "color": [tuple(drone.color) for drone in drones],
+            "pos": positions,
+            "color": colors,
         },
     )
     blend, depth = gpu.state.blend_get(), gpu.state.depth_test_get()
@@ -398,6 +549,9 @@ def _on_frame(scene, depsgraph=None):
 
 @persistent
 def _on_load(_unused):
+    clear_video_frame()
+    _video_preview_errors.clear()
+    _migrate_loaded_video_effects()
     for scene in bpy.data.scenes:
         props = scene.drones_anim_led
         update_emission(scene, props.emission_strength)
@@ -407,6 +561,8 @@ def _on_load(_unused):
 def register():
     global _draw_handle
     Scene.drones_anim_led = PointerProperty(type=DroneAnimLEDProperties)
+    if not bpy.app.timers.is_registered(_migrate_loaded_video_effects):
+        bpy.app.timers.register(_migrate_loaded_video_effects, first_interval=0.0)
     if _on_frame not in bpy.app.handlers.frame_change_post:
         bpy.app.handlers.frame_change_post.append(_on_frame)
     if _on_load not in bpy.app.handlers.load_post:
@@ -419,6 +575,10 @@ def register():
 
 def unregister():
     global _draw_handle
+    if bpy.app.timers.is_registered(_migrate_loaded_video_effects):
+        bpy.app.timers.unregister(_migrate_loaded_video_effects)
+    clear_video_frame()
+    _video_preview_errors.clear()
     if _on_frame in bpy.app.handlers.frame_change_post:
         bpy.app.handlers.frame_change_post.remove(_on_frame)
     if _on_load in bpy.app.handlers.load_post:

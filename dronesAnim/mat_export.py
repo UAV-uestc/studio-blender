@@ -1,7 +1,6 @@
 """Scene export and dependency-free Level 5 MAT writing."""
 
 import os
-import re
 import struct
 import sys
 import tempfile
@@ -10,6 +9,7 @@ from dataclasses import dataclass
 from math import floor
 from pathlib import Path
 
+from .light_effects.indexing import natural_name_key
 from .sampling import SamplingPlan, sampling_plan
 
 
@@ -78,7 +78,7 @@ class MATExportResult:
     plan: SamplingPlan
 
 
-def _export_drones(scene):
+def _export_drones(scene, *, ordered=True):
     import bpy
 
     collection = bpy.data.collections.get("Drones")
@@ -90,16 +90,15 @@ def _export_drones(scene):
             and obj.name in scene.objects
         ]
     # Tagged objects remain exportable even if their attachment is removed.
-    drones.sort(key=lambda obj: [
-        (1, int(part)) if part.isdigit() else (0, part.casefold())
-        for part in re.split(r"(\d+)", obj.name)
-    ])
+    if ordered:
+        drones.sort(key=lambda obj: natural_name_key(obj.name))
     return drones
 
 
 def _sample_drones(context, drones, plan):
-    """Sample world positions and object RGB on the same evaluated frames."""
+    """Sample world positions and final procedural RGB at identical times."""
     from . import safety
+    from .light_effects.runtime import final_colors
 
     scene = context.scene
     samples = {name: array("d") for name in "xyzrgb"}
@@ -111,11 +110,15 @@ def _sample_drones(context, drones, plan):
             integer_frame = floor(frame)
             scene.frame_set(integer_frame, subframe=frame - integer_frame)
             depsgraph = context.evaluated_depsgraph_get()
+            ordered, colors, errors = final_colors(scene, depsgraph)
+            if errors:
+                raise ValueError("灯效采样失败：" + "; ".join(errors))
+            final_by_id = {drone.as_pointer(): color for drone, color in zip(ordered, colors)}
             for drone in drones:
                 evaluated = drone.evaluated_get(depsgraph)
                 for axis, value in zip("xyz", evaluated.matrix_world.translation):
                     samples[axis].append(value)
-                for channel, value in zip("rgb", evaluated.color):
+                for channel, value in zip("rgb", final_by_id[drone.as_pointer()]):
                     samples[channel].append(min(1.0, max(0.0, value)) * 255.0)
             context.window_manager.progress_update(column + 1)
     finally:
@@ -148,6 +151,8 @@ def export_mat(context, filepath):
     """Sample exportable drones and write MAT, restoring the scene on failure."""
     import bpy
 
+    from .video_projection import validate_video_export
+
     props = context.scene.drones_anim_panel
     plan = sampling_plan(
         props.start_frame, props.end_frame, props.sampling_mode, props.sampling_fps,
@@ -157,6 +162,7 @@ def export_mat(context, filepath):
         raise ValueError("没有可导出的无人机")
     if len(drones) * plan.count * 8 + 64 >= 2**31:
         raise ValueError("矩阵过大，超出当前 MAT 格式限制")
+    validate_video_export(context, plan)
     destination = Path(bpy.path.abspath(bpy.path.ensure_ext(filepath, ".mat")))
     wm = context.window_manager
     wm.progress_begin(0, plan.count)
