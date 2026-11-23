@@ -31,7 +31,7 @@ ENUMS = {
     "outputMappingMode": {item[0] for item in MAPPING_ITEMS},
     "outputMappingModeY": {item[0] for item in MAPPING_ITEMS},
     "blendMode": {item[0] for item in BLEND_ITEMS},
-    "type": {"COLOR_RAMP", "IMAGE", "FUNCTION"},
+    "type": {"COLOR_RAMP", "IMAGE", "FUNCTION", "VIDEO"},
     "target": {"ALL", "INSIDE_MESH", "FRONT_SIDE"},
 }
 RAMP_ENUMS = {
@@ -69,6 +69,16 @@ def effect_data(effect):
         "colorRamp": ramp_data(texture.color_ramp) if texture else None,
         "imageName": texture.image.name if texture and texture.image else effect.missing_image_name or None,
     }
+    if effect.type == "VIDEO":
+        data["video"] = {
+            "textureName": effect.video_texture.name if effect.video_texture else None,
+            "sourceDuration": effect.video_duration,
+            "viewCaptured": effect.video_view_captured,
+            "viewMatrix": list(effect.video_view_matrix),
+            "viewportSize": list(effect.video_viewport_size),
+            "targetNames": [target.drone.name if target.drone else None for target in effect.video_targets],
+            "endLocked": effect.video_end_locked,
+        }
     return data
 
 
@@ -134,6 +144,8 @@ def validate_entry(name, data):
             raise UnsupportedEffect(f"{name}: unsupported DroneAnim metadata")
         if "randomSeed" in metadata:
             number(metadata["randomSeed"], "randomSeed", integer=True, minimum=-2147483648, maximum=2147483647)
+    if data.get("type") == "VIDEO":
+        validate_video_data(name, data.get("video"))
     texture = data.get("texture")
     if texture is None:
         return
@@ -169,6 +181,27 @@ def validate_entry(name, data):
                 number(item["alpha"], "alpha", minimum=0, maximum=1)
 
 
+def validate_video_data(name, video):
+    if not isinstance(video, dict):
+        raise ValueError(f"{name}: video settings are required")
+    if video.get("textureName") is not None and not isinstance(video["textureName"], str):
+        raise ValueError(f"{name}: invalid video texture reference")
+    number(video.get("sourceDuration"), "sourceDuration", integer=True, minimum=0, maximum=2147483647)
+    for key in ("viewCaptured", "endLocked"):
+        if not isinstance(video.get(key), bool):
+            raise ValueError(f"{name}: {key} must be boolean")
+    for key, count in (("viewMatrix", 16), ("viewportSize", 2)):
+        values = video.get(key)
+        if not isinstance(values, list) or len(values) != count:
+            raise ValueError(f"{name}: invalid {key}")
+        for value in values:
+            number(value, key, integer=key == "viewportSize", minimum=1 if key == "viewportSize" else None,
+                   maximum=2147483647 if key == "viewportSize" else None)
+    targets = video.get("targetNames")
+    if not isinstance(targets, list) or any(value is not None and not isinstance(value, str) for value in targets):
+        raise ValueError(f"{name}: invalid video targets")
+
+
 def assign_entry(effect, data, warnings):
     for key, attr in FIELDS.items():
         if key in data:
@@ -191,6 +224,25 @@ def assign_entry(effect, data, warnings):
                 setattr(effect, missing, name)
                 effect.enabled = False
                 warnings.append(f"{effect.name}: unresolved {key}: {name}")
+    if effect.type == "VIDEO":
+        video = data["video"]
+        effect.video_texture = bpy.data.textures.get(video.get("textureName") or "")
+        effect.video_duration = video["sourceDuration"]
+        effect.video_view_matrix = video["viewMatrix"]
+        effect.video_viewport_size = video["viewportSize"]
+        effect.video_view_captured = video["viewCaptured"]
+        effect.video_end_locked = video["endLocked"]
+        effect.duration = data.get("duration", 1)
+        if effect.video_texture is None:
+            effect.enabled = False
+            warnings.append(f"{effect.name}: video texture is missing; reselect the video")
+        for name in video["targetNames"]:
+            drone = bpy.data.objects.get(name or "")
+            effect.video_targets.add().drone = drone
+            if drone is None:
+                effect.enabled = False
+                warnings.append(f"{effect.name}: video target is missing: {name}")
+        return
     if any("storyboard" in key.lower() or key.endswith("Offset") for key in data):
         warnings.append(f"{effect.name}: storyboard linkage discarded; absolute timing retained")
     texture = data.get("texture") or {}
@@ -252,7 +304,7 @@ def import_data(scene, data, *, filter="ALL"):
     with base_color_edit(scene):
         try:
             for name, settings in planned:
-                assign_entry(stack.append_effect(name), settings, warnings)
+                assign_entry(stack.append_effect(name, effect_type=settings.get("type", "COLOR_RAMP"), at_top=False), settings, warnings)
             if len(seeds) == 1:
                 stack.random_seed = seeds.pop()
         except Exception:

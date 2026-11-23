@@ -172,14 +172,18 @@ def video_is_active(effect, frame):
 def active_video_effects(settings, frame):
     if settings is None:
         return ()
-    return tuple(effect for effect in settings.video_effects if video_is_active(effect, frame))
+    if not settings.enabled:
+        return ()
+    return tuple(effect for effect in settings.entries if effect.type == "VIDEO" and video_is_active(effect, frame))
 
 
 def validate_video_export(context, plan):
-    settings = getattr(context.scene, "drones_anim_led", None)
+    settings = getattr(context.scene, "drones_anim_light_effects", None)
     if settings is None:
         return
-    for effect in settings.video_effects:
+    for effect in settings.entries:
+        if effect.type != "VIDEO" or not settings.enabled:
+            continue
         if not effect.video_enabled or not any(video_is_active(effect, frame) for frame in plan):
             continue
         if bpy.app.background or context.window is None:
@@ -210,12 +214,13 @@ def project_uv(positions, view_matrix, viewport_size, aspect):
     return indices, (screen - center) / fitted_size + 0.5
 
 
-def projected_colors(effects, scene_frame, positions, base_colors, *, drones=None):
-    """Apply lower-priority effects first over the original LED colors."""
+def projected_colors(effects, scene_frame, positions, base_colors, *, drones=None, return_mask=False):
+    """Apply shared-list rows in order over the original LED colors."""
     colors = np.array(base_colors, dtype=np.float64)
     positions = np.asarray(positions, dtype=np.float64)
     drone_indices = None
-    for effect in reversed(effects):
+    affected = np.zeros(len(colors), dtype=bool)
+    for effect in effects:
         if not effect.video_view_captured:
             raise ValueError(f"{effect.name}：请先捕获投影视角")
         target_indices = None
@@ -244,7 +249,8 @@ def projected_colors(effects, scene_frame, positions, base_colors, *, drones=Non
         )
         if target_indices is not None:
             indices = target_indices[indices]
+        affected[indices] = True
         colors[indices, :3] = sample_pixels_clamped(
             video_frame.pixels, uv, srgb=video_frame.srgb
         )
-    return colors
+    return (colors, affected) if return_mask else colors

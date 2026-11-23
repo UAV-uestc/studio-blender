@@ -1,4 +1,4 @@
-"""Persistent, scene-local settings for the procedural LED effect stack.
+"""Persistent, scene-local settings for the shared LED effect stack.
 
 Adapted from Skybrush Studio for Blender (GPL-3.0-or-later).
 """
@@ -11,7 +11,9 @@ from bpy.props import (
     CollectionProperty,
     EnumProperty,
     FloatProperty,
+    FloatVectorProperty,
     IntProperty,
+    IntVectorProperty,
     PointerProperty,
     StringProperty,
 )
@@ -61,7 +63,19 @@ BLEND_ITEMS = tuple(
 )
 
 
+def _video_lock_changed(effect, context):
+    if not effect.video_end_locked:
+        from ..video_projection import video_natural_end
+
+        effect.duration = max(1, video_natural_end(effect) - effect.frame_start + 1)
+    _effect_changed(effect, context)
+
+
 def _get_frame_end(effect):
+    if effect.type == "VIDEO" and effect.video_end_locked:
+        from ..video_projection import video_natural_end
+
+        return video_natural_end(effect)
     return effect.frame_start + effect.duration - 1
 
 
@@ -101,6 +115,17 @@ def _effect_changed(value, _context):
         scene.update_tag()
 
 
+def _effect_type_changed(effect, context):
+    if effect.type != "VIDEO" and effect.texture is None:
+        texture = bpy.data.textures.new("DroneAnim Light Effect", type="IMAGE")
+        texture["drones_anim_light_effect_owner"] = effect.effect_id
+        texture.use_color_ramp = True
+        for element in texture.color_ramp.elements:
+            element.alpha = 1.0
+        effect.texture = texture
+    _effect_changed(effect, context)
+
+
 def _name_updated(effect, _context):
     scene = effect.id_data
     stack = getattr(scene, "drones_anim_light_effects", None)
@@ -119,8 +144,12 @@ class DroneAnimLightFunctionProperties(PropertyGroup):
     name: StringProperty(name="Function name", update=_effect_changed)
 
 
+class DroneAnimLightVideoTarget(PropertyGroup):
+    drone: PointerProperty(type=Object, update=_effect_changed)
+
+
 class DroneAnimLightEffect(PropertyGroup):
-    """Settings and owned texture reference for one procedural effect."""
+    """Settings and texture references for one procedural or video effect."""
 
     effect_id: StringProperty(name="Identifier", options={"HIDDEN"})
     name: StringProperty(name="Name", default="Untitled", update=_name_updated)
@@ -131,9 +160,10 @@ class DroneAnimLightEffect(PropertyGroup):
             ("COLOR_RAMP", "颜色渐变", "", 1),
             ("IMAGE", "图像", "", 2),
             ("FUNCTION", "Python 函数", "", 3),
+            ("VIDEO", "视频投影", "", 4),
         ),
         default="COLOR_RAMP",
-        update=_effect_changed,
+        update=_effect_type_changed,
     )
     frame_start: IntProperty(name="Start frame", default=0, update=_effect_changed)
     duration: IntProperty(name="Duration", default=1, min=1, update=_effect_changed)
@@ -169,6 +199,24 @@ class DroneAnimLightEffect(PropertyGroup):
     influence: FloatProperty(name="Influence", default=1.0, min=0.0, soft_max=1.0, update=_effect_changed)
     randomness: FloatProperty(name="Randomness", default=0.0, min=0.0, soft_max=1.0, update=_effect_changed)
 
+    video_texture: PointerProperty(type=Texture, update=_effect_changed)
+    video_duration: IntProperty(min=0, update=_effect_changed)
+    video_view_captured: BoolProperty(update=_effect_changed)
+    video_view_matrix: FloatVectorProperty(size=16, update=_effect_changed)
+    video_viewport_size: IntVectorProperty(size=2, min=1, update=_effect_changed)
+    video_targets: CollectionProperty(type=DroneAnimLightVideoTarget)
+    video_end_locked: BoolProperty(default=True, update=_video_lock_changed)
+    video_end: IntProperty(get=_get_frame_end, set=_set_frame_end, update=_effect_changed)
+
+    # The decoder uses these aliases; enabled and frame range live in the shared model.
+    @property
+    def video_enabled(self):
+        return self.enabled
+
+    @property
+    def video_start(self):
+        return self.frame_start
+
     def get_time_fraction_for_frame(self, frame):
         return time_fraction(self.frame_start, self.duration, frame)
 
@@ -176,6 +224,7 @@ class DroneAnimLightEffect(PropertyGroup):
 class DroneAnimLightEffectCollection(PropertyGroup):
     """Scene-specific effect stack and its current selection."""
 
+    list_version: IntProperty(default=0, options={"HIDDEN"})
     enabled: BoolProperty(name="Light effects", default=True, update=_effect_changed)
     entries: CollectionProperty(type=DroneAnimLightEffect)
     active_entry_index: IntProperty(name="Active effect", default=0, min=0)
@@ -186,19 +235,20 @@ class DroneAnimLightEffectCollection(PropertyGroup):
         index = self.active_entry_index
         return self.entries[index] if 0 <= index < len(self.entries) else None
 
-    def append_effect(self, name="Untitled", *, select=True):
+    def append_effect(self, name="Untitled", *, select=True, effect_type="COLOR_RAMP", at_top=False):
+        self.list_version = 1
         entry = self.entries.add()
         entry.effect_id = uuid4().hex
         entry.name = name
-        texture = bpy.data.textures.new("DroneAnim Light Effect", type="IMAGE")
-        texture["drones_anim_light_effect_owner"] = entry.effect_id
-        texture.use_color_ramp = True
-        for element in texture.color_ramp.elements:
-            element.alpha = 1.0
-        entry.texture = texture
+        entry.type = effect_type
+        index = len(self.entries) - 1
+        if at_top:
+            self.entries.move(index, 0)
+            index = 0
         if select:
-            self.active_entry_index = len(self.entries) - 1
-        return entry
+            self.active_entry_index = index
+        _effect_changed(self, None)
+        return self.entries[index]
 
     def duplicate_active(self):
         index = self.active_entry_index
@@ -230,6 +280,8 @@ class DroneAnimLightEffectCollection(PropertyGroup):
             "blend_mode",
             "influence",
             "randomness",
+            "video_texture", "video_duration", "video_view_captured",
+            "video_view_matrix", "video_viewport_size", "video_end_locked",
         ):
             setattr(copy, attr, getattr(source, attr))
         for attr in ("output_function", "output_function_y", "color_function"):
@@ -238,9 +290,15 @@ class DroneAnimLightEffectCollection(PropertyGroup):
             target_fn.path = source_fn.path
             target_fn.name = source_fn.name
         if source.texture is not None:
+            previous_texture = copy.texture
             texture = source.texture.copy()
             texture["drones_anim_light_effect_owner"] = copy.effect_id
             copy.texture = texture
+            if previous_texture is not None and previous_texture.users == 0:
+                bpy.data.textures.remove(previous_texture)
+        copy.duration = source.duration
+        for target in source.video_targets:
+            copy.video_targets.add().drone = target.drone
         self.entries.move(len(self.entries) - 1, index + 1)
         self.active_entry_index = index + 1
         return self.active_entry
@@ -251,6 +309,8 @@ class DroneAnimLightEffectCollection(PropertyGroup):
             return
         index = self.active_entry_index
         effect_id = entry.effect_id
+        video_texture = entry.video_texture
+        entry.video_texture = None
         entry.texture = None
         self.entries.remove(index)
         for texture in tuple(bpy.data.textures):
@@ -259,6 +319,9 @@ class DroneAnimLightEffectCollection(PropertyGroup):
                 and texture.users == 0
             ):
                 bpy.data.textures.remove(texture)
+        from ..video_projection import discard_unused_video
+
+        discard_unused_video(video_texture)
         self.active_entry_index = max(0, min(index, len(self.entries) - 1))
         _effect_changed(self, None)
 

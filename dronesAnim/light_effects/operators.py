@@ -31,7 +31,7 @@ class DroneAnimLightStackOperator(Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     action: EnumProperty(items=(
-        ("ADD", "新建", ""), ("REMOVE", "删除", ""),
+        ("ADD", "程序灯效", ""), ("ADD_VIDEO", "视频灯效", ""), ("REMOVE", "删除", ""),
         ("DUPLICATE", "复制", ""), ("UP", "上移", ""), ("DOWN", "下移", ""),
         ("START", "起始设为当前帧", ""), ("END", "结束设为当前帧", ""),
     ))
@@ -42,8 +42,9 @@ class DroneAnimLightStackOperator(Operator):
 
     def execute(self, context):
         stack = context.scene.drones_anim_light_effects
-        if self.action == "ADD":
-            effect = stack.append_effect("灯光效果")
+        if self.action in {"ADD", "ADD_VIDEO"}:
+            video = self.action == "ADD_VIDEO"
+            effect = stack.append_effect("视频灯效" if video else "程序灯效", effect_type="VIDEO" if video else "COLOR_RAMP")
             effect.frame_start = context.scene.frame_current
         elif stack.active_entry is None:
             return {"CANCELLED"}

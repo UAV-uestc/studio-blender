@@ -51,9 +51,9 @@ def main():
             element.color = (0, 1, 0, 1)
         drones = mat_export._export_drones(scene)
         assert [drone.name for drone in drones] == ["Drone2", "Drone10"]
-        video = led.video_effects.add()
+        video = stack.append_effect("Synthetic blue video", effect_type="VIDEO")
         video.name = "Synthetic blue video"
-        video.video_start, video.video_duration = 1, 2
+        video.frame_start, video.video_duration = 1, 2
         video.video_view_captured = True
         video.video_view_matrix = tuple(np.eye(4).ravel())
         video.video_viewport_size = (100, 100)
@@ -61,7 +61,7 @@ def main():
         texture["drones_anim_video_fps"] = 24.0
         video.video_texture = texture
         video.video_targets.add().drone = drones[0]
-        video.video_enabled = True
+        video.enabled = True
         decoded = video_projection.VideoFrame(
             np.array([[[0, 0, 1, 1]]], dtype=np.float32), 1.0, False)
         expected_rgb = np.array([
@@ -92,7 +92,7 @@ def main():
             graph = bpy.context.evaluated_depsgraph_get()
             ordered, colors, errors = runtime.final_colors(scene, graph)
             assert not errors, errors
-            np.testing.assert_allclose(colors[:, :3], [(0, 0, 1), (1, 0, 0)])
+            np.testing.assert_allclose(colors[:, :3], [(1, 0, 0), (1, 0, 0)])
             stack.enabled = True
             scene.frame_set(7, subframe=0.25)
             plan = sampling_plan(1, 4)
@@ -109,7 +109,7 @@ def main():
             try:
                 mat_export._sample_drones(bpy.context, drones, plan)
             except ValueError as error:
-                assert "Video projection" in str(error)
+                assert "Synthetic blue video" in str(error)
             else:
                 raise AssertionError("Invalid video did not fail sampling")
             assert scene.frame_current == 7 and scene.frame_subframe == 0.25
@@ -121,14 +121,14 @@ def main():
                 pass
             else:
                 raise AssertionError("Background video export was not rejected")
-            video.video_enabled = False
+            video.enabled = False
             scene.drones_anim_panel.start_frame = 1
             scene.drones_anim_panel.end_frame = 4
             scene.drones_anim_panel.sampling_mode = "SCENE"
             mat_export.export_mat(bpy.context, str(output / "procedural.mat"))
         # Video property lifecycle, operator registration, and clean unload/reload.
         assert bpy.ops.drones_anim.open_led_video.get_rna_type()
-        assert bpy.ops.drones_anim.edit_video_effects.get_rna_type()
+        assert bpy.ops.drones_anim.light_effect_stack.get_rna_type()
     finally:
         dronesAnim.unregister()
     for name in ("drones_anim_led", "drones_anim_light_effects", "drones_anim_panel"):

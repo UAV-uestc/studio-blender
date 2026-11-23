@@ -7,7 +7,7 @@ import bpy
 import numpy as np
 from bpy.app.handlers import persistent
 
-from ..video_projection import active_video_effects, projected_colors
+from ..video_projection import video_is_active
 from .evaluator import evaluate_stack
 from .functions import TrustedFunctions
 from .images import ImagePixelCache
@@ -126,25 +126,6 @@ def final_colors(scene, depsgraph, *, publish=False):
         colors, errors = evaluate_stack(
             scene, drones, positions, base, depsgraph, state.images, _trust
         )
-        # Video projection overlays the procedural stack for every consumer.
-        effects = active_video_effects(
-            getattr(scene, "drones_anim_led", None),
-            scene.frame_current + scene.frame_subframe,
-        )
-        if effects and drones:
-            from ..mat_export import _export_drones
-
-            exportable = set(_export_drones(scene, ordered=False))
-            indices = [index for index, drone in enumerate(drones) if drone in exportable]
-            if indices:
-                try:
-                    colors[indices] = projected_colors(
-                        effects, scene.frame_current + scene.frame_subframe,
-                        positions[indices], colors[indices],
-                        drones=[drones[index] for index in indices],
-                    )
-                except (ValueError, RuntimeError, OSError) as exc:
-                    errors.append(f"Video projection: {exc}")
         if publish:
             _publish(state, drones, colors, depsgraph)
         state.key = key
@@ -185,12 +166,12 @@ def update_scene(scene, depsgraph):
         return
     stack = scene.drones_anim_light_effects
     frame = scene.frame_current + scene.frame_subframe
-    procedural_active = stack.enabled and any(
+    active = stack.enabled and any(
+        video_is_active(effect, frame) if effect.type == "VIDEO" else
         effect.enabled and effect.frame_start <= frame <= effect.frame_end
         for effect in stack.entries
     )
-    video_active = active_video_effects(getattr(scene, "drones_anim_led", None), frame)
-    if not procedural_active and not video_active:
+    if not active:
         state = _states.get(scene.as_pointer())
         if state is not None and state.published:
             restore_scene(scene, depsgraph)

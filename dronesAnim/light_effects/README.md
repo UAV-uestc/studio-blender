@@ -307,3 +307,25 @@ fixtures separately. The standalone fixture expects `BLENDER_USER_SCRIPTS`
 to point to the temporary copied installation. GUI fixtures additionally use
 `DRONEANIM_UI_OUTPUT` for screenshots; the optional co-installation fixture
 requires Skybrush's own separately installed package and dependencies.
+
+
+## Shared video/procedural list
+
+The lighting sidebar contains **LED** (ordinary color and UV sampling) and
+**灯效** (one shared list). Use **程序灯效** or **视频灯效** to add a row. Lower
+rows overlay upper rows; moving a video across a procedural row changes their
+composition order. Both types use the same master switch, timing, fades,
+influence and blend controls. Video rows additionally expose a local source,
+source-duration lock/looping, and captured projection view/targets.
+
+Legacy independent video lists migrate on registration/load, preserving their
+priority over existing procedural effects and converting scene keyframe paths.
+JSON retains video texture names, source frame counts, projection matrices,
+target names and range locks. It references existing assets and does not open
+external video files automatically. Missing references import disabled. These
+video JSON rows are a DroneAnim-specific extension.
+
+Run `test/blender_unified_lights_smoke.py` with Blender's `--background
+--factory-startup --python-exit-code 1 --python` flags to verify the shared list,
+legacy migration and panel draw branches. Decoded video pixels are synthetic in
+this test; native video decoding and interactive export require GUI validation.

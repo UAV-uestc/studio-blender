@@ -116,18 +116,34 @@ The local `merge/non-numba` branch integrates these source tips:
 - `led`: `554f32a`
 - `feat/video-led-projection`: `29e7d35`
 
-The `numba` branch is excluded. The `dronesAnim` conflict resolution keeps both
-procedural light effects and video projection: evaluated object colors feed the
-procedural stack, then active video effects overlay the result. Video list order
-and target selection retain their existing meaning. Markers, evaluated material
-colors, and MAT samples share the final-color evaluator. Invalid effects are
-reported in preview and stop MAT sampling; sampling restores the original frame
-on both success and failure. Video setting changes invalidate the shared cache.
+The `numba` branch is excluded. The lighting sidebar now has two panels:
+
+- **LED**: ordinary primary/secondary color picking, color keyframes and UV sampling.
+- **灯效 (Effects)**: one list containing video projection, ramps, images, presets
+  and Python effects. Add either a procedural or video row, then use the same
+  enable, duplicate, remove and reorder actions. Lower rows overlay upper rows,
+  so videos and procedural effects can be interleaved. The master switch, timing,
+  fade, influence and blend mode apply to both kinds of effect.
+
+Markers, evaluated material colors, and MAT samples share the final-color
+evaluator. Invalid effects are reported in preview and stop MAT sampling;
+sampling restores the original frame on both success and failure.
+
+Older scene video settings migrate into the shared list on load/registration.
+Procedural rows keep their order; legacy video rows are appended in reverse
+order to preserve their former priority above procedural effects. Migrated scene
+Action-slot/NLA F-Curves and drivers retain their video property bindings.
+Legacy RNA fields remain available only for migration. JSON includes video
+projection settings and asset references; missing video textures/target objects
+are reported and imported disabled rather than silently widening their scope.
+Video-specific JSON rows are a DroneAnim extension, not a Skybrush interchange
+format guarantee.
 
 Run the isolated integration check on Windows:
 
 ```powershell
 & 'C:/Program Files/Blender Foundation/Blender 5.2/blender.exe' --background --factory-startup --python-exit-code 1 --python test/blender_non_numba_merge_smoke.py
+& 'C:/Program Files/Blender Foundation/Blender 5.2/blender.exe' --background --factory-startup --python-exit-code 1 --python test/blender_unified_lights_smoke.py
 # In a Python environment containing NumPy, SciPy and pytest:
 python test/verify_non_numba_mat.py
 $env:PYTHONPATH = 'src/modules'
@@ -148,6 +164,9 @@ is preserved (`x`, `y`, `z`, `r`, `g`, `b`: double matrices, drones by samples;
 planned canonical `t`/`id`/`xyz`/`rgb` contract or establish flight safety.
 
 Validation on Blender 5.2.1 LTS: the isolated integration smoke test and independent
-SciPy MAT round trip passed; the repository suite passed all 131 tests. The safety
+SciPy MAT round trip passed; the repository suite passed all 131 tests. The additional unified-list smoke test covers mixed reordering,
+blend strength, enable/disable, duplicate/delete, video looping, JSON round trips,
+invalid-input rejection, two-panel draw paths, idempotent legacy migration and
+keyframe path conversion. The safety
 math test loader now provides package context for its relative imports without
 importing Blender. Changed Python sources also passed `py_compile`.

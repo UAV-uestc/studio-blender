@@ -1,8 +1,9 @@
-"""Chinese lighting sidebar for the standalone procedural stack."""
+"""Unified procedural/video light-effect sidebar."""
 
 import bpy
 from bpy.types import Panel, UIList
 
+from ..video_projection import video_natural_end, video_source_fps
 from .runtime import state_for, trust_store
 
 
@@ -41,13 +42,13 @@ class DRONESANIM_UL_light_effects(UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
         row = layout.row(align=True)
         row.prop(item, "enabled", text="")
-        row.prop(item, "name", text="", emboss=False)
+        row.prop(item, "name", text="", emboss=False, icon="FILE_MOVIE" if item.type == "VIDEO" else "TEXTURE")
         row.label(text=f"{item.frame_start}–{item.frame_end}")
 
 
 class DroneAnimLightEffectsPanel(Panel):
     bl_idname = "OBJECT_PT_drones_anim_light_effects"
-    bl_label = "灯光效果"
+    bl_label = "灯效"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "灯光控制"
@@ -59,10 +60,13 @@ class DroneAnimLightEffectsPanel(Panel):
         layout.use_property_split = True
         layout.use_property_decorate = False
         layout.prop(stack, "enabled", text="启用灯光效果")
+        row = layout.row(align=True)
+        stack_button(row, "ADD", text="程序灯效", icon="ADD")
+        stack_button(row, "ADD_VIDEO", text="视频灯效", icon="FILE_MOVIE")
+        layout.label(text="列表下方优先；可混合排序")
         row = layout.row()
-        row.template_list("DRONESANIM_UL_light_effects", "", stack, "entries", stack, "active_entry_index", rows=4)
+        row.template_list("DRONESANIM_UL_light_effects", "", stack, "entries", stack, "active_entry_index", rows=4, sort_lock=True)
         buttons = row.column(align=True)
-        stack_button(buttons, "ADD", icon="ADD")
         editing = buttons.column(align=True)
         editing.enabled = stack.active_entry is not None
         for action, icon in (("REMOVE", "REMOVE"), ("DUPLICATE", "DUPLICATE"), ("UP", "TRIA_UP"), ("DOWN", "TRIA_DOWN")):
@@ -70,23 +74,34 @@ class DroneAnimLightEffectsPanel(Panel):
         row = layout.row(align=True)
         for action, label in (("IMPORT", "导入 JSON"), ("EXPORT", "导出 JSON")):
             row.operator("drones_anim.light_effect_json", text=label).action = action
-        layout.prop(stack, "random_seed", text="随机种子")
         effect = stack.active_entry
         if effect is None:
             return
         box = layout.box()
         box.prop(effect, "name", text="名称")
         box.prop(effect, "enabled", text="启用此效果")
-        for attr, label in (("frame_start", "起始帧"), ("duration", "持续帧数"), ("frame_end", "结束帧")):
-            box.prop(effect, attr, text=label)
+        box.prop(effect, "frame_start", text="起始帧")
+        if effect.type == "VIDEO":
+            end = box.row(align=True)
+            field = end.row(align=True)
+            field.enabled = not effect.video_end_locked
+            field.prop(effect, "frame_end", text="结束帧")
+            end.prop(effect, "video_end_locked", text="", icon="LOCKED" if effect.video_end_locked else "UNLOCKED")
+        else:
+            box.prop(effect, "duration", text="持续帧数")
+            box.prop(effect, "frame_end", text="结束帧")
         row = box.row(align=True)
         stack_button(row, "START", text="起始设为当前帧")
-        stack_button(row, "END", text="结束设为当前帧")
+        end = row.row(align=True)
+        end.enabled = effect.type != "VIDEO" or not effect.video_end_locked
+        stack_button(end, "END", text="结束设为当前帧")
         box.prop(effect, "fade_in_duration", text="淡入帧数")
         box.prop(effect, "fade_out_duration", text="淡出帧数")
         box = layout.box()
         box.prop(effect, "type", text="颜色来源")
-        if effect.type == "FUNCTION":
+        if effect.type == "VIDEO":
+            video_controls(box, effect)
+        elif effect.type == "FUNCTION":
             function_controls(box, effect, "color_function")
         else:
             if effect.texture is not None:
@@ -104,7 +119,29 @@ class DroneAnimLightEffectsPanel(Panel):
             box.prop(effect, "mesh", text="目标网格")
         box.prop(effect, "drone_group", text="无人机集合")
         box.prop(effect, "invert_target", text="反向选择")
-        for attr, label in (("blend_mode", "混合模式"), ("influence", "影响程度"), ("randomness", "随机偏移")):
+        for attr, label in (("blend_mode", "混合模式"), ("influence", "影响程度")):
             layout.prop(effect, attr, text=label)
+        if effect.type != "VIDEO":
+            layout.prop(effect, "randomness", text="随机偏移")
+            layout.prop(stack, "random_seed", text="随机种子")
         for error in state_for(context.scene).errors:
             layout.label(text=error, icon="ERROR")
+
+
+def video_controls(layout, effect):
+    texture = effect.video_texture
+    image = texture.image if isinstance(texture, bpy.types.ImageTexture) else None
+    layout.operator("drones_anim.open_led_video",
+                    text=bpy.path.basename(image.filepath) if image else "选择视频", icon="FILE_FOLDER")
+    if effect.video_duration:
+        layout.label(text=f"素材帧数：{effect.video_duration}")
+        fps = video_source_fps(texture)
+        layout.label(text=f"素材帧率：{fps:g} FPS" if fps > 0 else "请重新选择视频以读取帧率")
+    if effect.video_duration and effect.frame_end > video_natural_end(effect):
+        layout.label(text=f"第 {video_natural_end(effect) + 1} 帧起循环")
+    layout.operator("drones_anim.capture_led_video_view", icon="VIEW_CAMERA")
+    layout.label(text="投影视角已捕获" if effect.video_view_captured else "请先捕获投影视角",
+                 icon="CHECKMARK" if effect.video_view_captured else "INFO")
+    layout.operator("drones_anim.select_led_video_targets", icon="RESTRICT_SELECT_OFF")
+    count = len(effect.video_targets)
+    layout.label(text=f"影响范围：{count} 架无人机" if count else "影响范围：全部无人机")

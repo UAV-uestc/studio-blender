@@ -3,6 +3,7 @@
 import bpy
 import numpy as np
 
+from ..video_projection import projected_colors, video_is_active
 from .context import LightEffectEvaluationContext, ObjectPositions
 from .functions import color_function_version, evaluate_custom
 from .geometry import target_mask
@@ -76,8 +77,10 @@ def evaluate_stack(scene, drones, positions, base_colors, depsgraph, image_cache
     mapping = vertex_indices(drones)
     errors = []
 
+    # Later rows overlay earlier rows, regardless of effect type.
     for effect in stack.entries:
-        if not effect.enabled or not contains_frame(effect.frame_start, effect.duration, frame):
+        active = video_is_active(effect, frame) if effect.type == "VIDEO" else contains_frame(effect.frame_start, effect.duration, frame)
+        if not effect.enabled or not active:
             continue
         try:
             if effect.missing_group_name and effect.drone_group is None:
@@ -95,7 +98,23 @@ def evaluate_stack(scene, drones, positions, base_colors, depsgraph, image_cache
                 backdrop=working_backdrop,
                 colors=np.zeros((count, 4), dtype=np.float32),
             )
-            if effect.type == "FUNCTION":
+            if effect.type == "VIDEO":
+                from ..mat_export import _export_drones
+
+                exportable = set(_export_drones(scene, ordered=False))
+                indices = [index for index, drone in enumerate(drones) if drone in exportable]
+                if not indices:
+                    continue
+                projected, affected = projected_colors(
+                    [effect], frame, positions[indices], result[indices],
+                    drones=[drones[index] for index in indices], return_mask=True,
+                )
+                colors = result.copy()
+                colors[indices] = projected
+                video_mask = np.zeros(count, dtype=bool)
+                video_mask[indices] = affected
+                selected &= video_mask
+            elif effect.type == "FUNCTION":
                 function = _load_function(trust, effect.color_function)
                 colors = evaluate_custom(
                     function, effect, context, frame,
@@ -120,7 +139,7 @@ def evaluate_stack(scene, drones, positions, base_colors, depsgraph, image_cache
                 else:
                     raise ValueError(f"Unknown effect type: {effect.type!r}")
             influence = effect_influence(
-                effect.frame_start, effect.duration, frame, effect.influence,
+                effect.frame_start, effect.frame_end - effect.frame_start + 1, frame, effect.influence,
                 effect.fade_in_duration, effect.fade_out_duration,
             )
             result = compose_layers(

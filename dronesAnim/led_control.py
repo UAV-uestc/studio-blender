@@ -18,23 +18,18 @@ from bpy.props import (
     PointerProperty,
     StringProperty,
 )
-from bpy.types import Image, Object, Operator, Panel, PropertyGroup, Scene, Texture, UIList
+from bpy.types import Image, Object, Operator, Panel, PropertyGroup, Scene, Texture
 
 from .led_animation import edit_base_colors, get_drones, insert_color, update_emission
-from .mat_export import _export_drones
 from .video_projection import (
     clear_video_frame,
-    discard_unused_video,
     ensure_video_source_fps,
-    load_video,
     video_natural_end,
-    video_source_fps,
 )
 from .uv_sampling import sample_attached_colors
 
 _draw_handle = None
 _video_preview_errors = {}
-_VIDEO_PRIORITY_HINT = "列表上方灯效具有更高优先级"
 
 
 def _views():
@@ -152,7 +147,6 @@ class DroneAnimLEDProperties(PropertyGroup):
     video_effects: CollectionProperty(type=DroneAnimVideoEffect)
     video_effect_index: IntProperty(
         default=0, min=0, options={"HIDDEN"},
-        update=lambda props, context: _select_video_drones(props, context),
     )
     # Retain the previous scene properties until older files have been migrated.
     video_enabled: BoolProperty(options={"HIDDEN"})
@@ -394,128 +388,11 @@ class DroneAnimSampleUVColorsOperator(Operator):
         return {"FINISHED"}
 
 
-class DroneAnimOpenVideoOperator(Operator):
-    bl_idname = "drones_anim.open_led_video"
-    bl_label = "打开视频"
-    bl_description = "为无人机灯光投影载入本地视频"
-    bl_options = {"UNDO"}
-
-    filepath: StringProperty(subtype="FILE_PATH", options={"SKIP_SAVE"})
-
-    @classmethod
-    def description(cls, context, _properties):
-        settings = getattr(context.scene, "drones_anim_led", None)
-        effect = _selected_video_effect(settings) if settings is not None else None
-        texture = effect.video_texture if effect is not None else None
-        if isinstance(texture, bpy.types.ImageTexture) and texture.image is not None:
-            return f"选择视频\n当前文件：{bpy.path.basename(texture.image.filepath)}"
-        return cls.bl_description
-
-    def invoke(self, context, _event):
-        context.window_manager.fileselect_add(self)
-        return {"RUNNING_MODAL"}
-
-    def execute(self, context):
-        props = context.scene.drones_anim_led
-        try:
-            texture, duration = load_video(bpy.path.abspath(self.filepath))
-        except (ValueError, RuntimeError, OSError) as error:
-            self.report({"ERROR"}, str(error))
-            return {"CANCELLED"}
-        effect = _selected_video_effect(props)
-        if effect is None:
-            effect = _add_video_effect(props, context.scene.frame_current)
-        previous = effect.video_texture
-        effect.video_texture = texture
-        effect.video_duration = duration
-        if previous is None:
-            effect.name = bpy.path.basename(texture.image.filepath)
-        discard_unused_video(previous)
-        _video_changed(effect, context)
-        return {"FINISHED"}
-
-
-class DroneAnimCaptureVideoViewOperator(Operator):
-    bl_idname = "drones_anim.capture_led_video_view"
-    bl_label = "捕获当前视角与无人机"
-    bl_description = "记录当前 3D 视角和选中的无人机。没有选中无人机时保留影响范围"
-    bl_options = {"UNDO"}
-
-    @classmethod
-    def poll(cls, context):
-        return (
-            context.area is not None
-            and context.area.type == "VIEW_3D"
-            and _selected_video_effect(context.scene.drones_anim_led) is not None
-        )
-
-    def execute(self, context):
-        region = next((region for region in context.area.regions if region.type == "WINDOW"), None)
-        view = context.region_data or context.space_data.region_3d
-        if view is None or region is None or min(region.width, region.height) < 1:
-            self.report({"ERROR"}, "请在有效的 3D 视口中捕获视角")
-            return {"CANCELLED"}
-        matrix = view.perspective_matrix.copy()
-        if matrix.determinant() == 0.0:
-            self.report({"ERROR"}, "请等待 3D 视口更新后重新捕获")
-            return {"CANCELLED"}
-        effect = _selected_video_effect(context.scene.drones_anim_led)
-        effect.video_view_matrix = tuple(value for row in matrix for value in row)
-        effect.video_viewport_size = (region.width, region.height)
-        effect.video_view_captured = True
-        selected = set(context.selected_objects or ())
-        if selected:
-            drones = _export_drones(context.scene, ordered=False)
-            targets = [drone for drone in drones if drone in selected]
-            if targets:
-                effect.video_targets.clear()
-                if len(targets) < len(drones):
-                    for drone in targets:
-                        effect.video_targets.add().drone = drone
-        _video_changed(effect, context)
-        return {"FINISHED"}
-
-
-def _selected_video_effect(props):
-    index = props.video_effect_index
-    return props.video_effects[index] if index < len(props.video_effects) else None
-
-
-def _select_video_drones(props, context):
-    effect = _selected_video_effect(props)
-    if effect is None or not effect.video_view_captured:
-        return
-    if context.scene != props.id_data or context.mode != "OBJECT":
-        return
-
-    drones = _export_drones(context.scene, ordered=False)
-    selectable = set(context.selectable_objects or ())
-    if effect.video_targets:
-        selectable.intersection_update(target.drone for target in effect.video_targets)
-    targets = [drone for drone in drones if drone in selectable]
-    target_set = set(targets)
-    selected = set(context.selected_objects or ())
-    view_layer = context.view_layer
-    for obj in selected - target_set:
-        obj.select_set(False, view_layer=view_layer)
-    for drone in target_set - selected:
-        drone.select_set(True, view_layer=view_layer)
-    if view_layer.objects.active not in target_set:
-        view_layer.objects.active = targets[0] if targets else None
-
-
-def _add_video_effect(props, frame):
-    effect = props.video_effects.add()
-    effect.video_start = frame
-    # Only choosing a list row should restore the viewport selection.
-    props["video_effect_index"] = len(props.video_effects) - 1
-    return effect
-
-
 def _migrate_video_effect(props):
     if props.video_effects or not (props.video_texture or props.video_duration or props.video_view_captured):
         return
-    effect = _add_video_effect(props, props.video_start)
+    effect = props.video_effects.add()
+    effect.video_start = props.video_start
     effect.video_texture = props.video_texture
     effect.video_duration = props.video_duration
     effect.video_view_captured = props.video_view_captured
@@ -545,119 +422,14 @@ def _migrate_loaded_video_effects():
                 except (OSError, RuntimeError, ValueError):
                     # The user can reselect missing or unsupported media from the panel.
                     pass
+        from .light_effects.migration import migrate_scene
 
-
-class DroneAnimEditVideoEffectsOperator(Operator):
-    bl_idname = "drones_anim.edit_video_effects"
-    bl_label = "编辑视频灯效列表"
-    bl_options = {"UNDO"}
-
-    action: EnumProperty(items=(
-        ("ADD", "添加", ""),
-        ("REMOVE", "移除", ""),
-        ("UP", "上移", ""),
-        ("DOWN", "下移", ""),
-    ))
-
-    @classmethod
-    def description(cls, context, properties):
-        if properties.action == "UP":
-            return f"上移灯效。{_VIDEO_PRIORITY_HINT}"
-        if properties.action == "DOWN":
-            return f"下移灯效。{_VIDEO_PRIORITY_HINT}"
-        return cls.bl_label
-
-    def execute(self, context):
-        props = context.scene.drones_anim_led
-        effects = props.video_effects
-        index = props.video_effect_index
-        if self.action == "ADD":
-            _add_video_effect(props, context.scene.frame_current)
-        elif index >= len(effects):
-            return {"CANCELLED"}
-        elif self.action == "REMOVE":
-            texture = effects[index].video_texture
-            effects.remove(index)
-            props["video_effect_index"] = min(index, max(0, len(effects) - 1))
-            discard_unused_video(texture)
-        else:
-            target = index + (-1 if self.action == "UP" else 1)
-            if not 0 <= target < len(effects):
-                return {"CANCELLED"}
-            effects.move(index, target)
-            props["video_effect_index"] = target
-            self.report({"INFO"}, _VIDEO_PRIORITY_HINT)
-        _video_changed(props, context)
-        return {"FINISHED"}
-
-
-class DRONES_ANIM_UL_video_effects(UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index=0):
-        row = layout.row(align=True)
-        ready = item.video_texture is not None and item.video_view_captured
-        toggle = row.row(align=True)
-        toggle.enabled = item.video_enabled or ready
-        toggle.prop(item, "video_enabled", text="")
-        row.prop(item, "name", text="", emboss=False, icon="FILE_MOVIE")
-        if item.video_duration:
-            row.label(text=f"{item.video_start}–{item.video_end}")
-
-
-def _draw_video_effects(layout, props):
-    box = layout.box()
-    box.label(text="视频灯效", icon="FILE_MOVIE")
-    row = box.row()
-    row.template_list(
-        "DRONES_ANIM_UL_video_effects", "", props, "video_effects",
-        props, "video_effect_index", rows=3, sort_lock=True,
-    )
-    buttons = row.column(align=True)
-    operator = DroneAnimEditVideoEffectsOperator.bl_idname
-    buttons.operator(operator, text="", icon="ADD").action = "ADD"
-    effect = _selected_video_effect(props)
-    if effect is None:
-        return
-    buttons.operator(operator, text="", icon="REMOVE").action = "REMOVE"
-    if len(props.video_effects) > 1:
-        buttons.separator()
-        buttons.operator(operator, text="", icon="TRIA_UP").action = "UP"
-        buttons.operator(operator, text="", icon="TRIA_DOWN").action = "DOWN"
-    texture = effect.video_texture
-    image = texture.image if isinstance(texture, bpy.types.ImageTexture) else None
-    box.operator(
-        DroneAnimOpenVideoOperator.bl_idname,
-        text=bpy.path.basename(image.filepath) if image is not None else "请选择视频",
-        icon="FILE_FOLDER",
-    )
-    if image is not None:
-        box.label(text=f"总帧数：{effect.video_duration}")
-        fps = video_source_fps(texture)
-        if fps > 0:
-            box.label(text=f"素材帧率：{fps:.3f}".rstrip("0").rstrip(".") + " FPS")
-        else:
-            box.label(text="素材帧率未知，请重新选择视频", icon="ERROR")
-    box.prop(effect, "video_start")
-    end_row = box.row(align=True)
-    end_field = end_row.row(align=True)
-    end_field.enabled = not effect.video_end_locked
-    end_field.prop(effect, "video_end")
-    end_row.prop(
-        effect, "video_end_locked", text="", toggle=True,
-        icon="LOCKED" if effect.video_end_locked else "UNLOCKED",
-    )
-    if effect.video_end < effect.video_start:
-        box.label(text="结束帧需大于或等于开始帧", icon="ERROR")
-    elif effect.video_duration and effect.video_end > video_natural_end(effect):
-        box.label(text=f"第 {video_natural_end(effect) + 1} 帧起循环播放")
-    box.operator(DroneAnimCaptureVideoViewOperator.bl_idname, icon="VIEW_CAMERA")
-    error = _video_preview_errors.get(props.id_data.session_uid)
-    if error:
-        box.label(text=error, icon="ERROR")
+        migrate_scene(scene)
 
 
 class DroneAnimLEDControlPanel(Panel):
     bl_idname = "OBJECT_PT_drones_anim_led_control"
-    bl_label = "灯光控制"
+    bl_label = "LED"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "灯光控制"
@@ -711,8 +483,6 @@ class DroneAnimLEDControlPanel(Panel):
         box.label(text="UV 贴图留空：使用活动渲染 UV")
         box.label(text="UV 接缝：使用第一个相邻面")
         box.operator(DroneAnimSampleUVColorsOperator.bl_idname, icon="KEY_HLT")
-
-        _draw_video_effects(layout, props)
 
 
 def marker_samples(scene, depsgraph):
