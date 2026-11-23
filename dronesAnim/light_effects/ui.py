@@ -59,11 +59,13 @@ class DroneAnimLightEffectsPanel(Panel):
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False
-        layout.prop(stack, "enabled", text="启用灯光效果")
         row = layout.row(align=True)
-        stack_button(row, "ADD", text="程序灯效", icon="ADD")
+        row.use_property_split = False
+        row.prop(stack, "enabled", text="启用灯光效果")
+        row.operator("drones_anim.light_effects_help", text="", icon="QUESTION", emboss=False)
+        row = layout.row(align=True)
+        stack_button(row, "ADD", text="添加灯效", icon="ADD")
         stack_button(row, "ADD_VIDEO", text="视频灯效", icon="FILE_MOVIE")
-        layout.label(text="列表下方优先；可混合排序")
         row = layout.row()
         row.template_list("DRONESANIM_UL_light_effects", "", stack, "entries", stack, "active_entry_index", rows=4, sort_lock=True)
         buttons = row.column(align=True)

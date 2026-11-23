@@ -312,9 +312,10 @@ requires Skybrush's own separately installed package and dependencies.
 ## Shared video/procedural list
 
 The lighting sidebar contains **LED** (ordinary color and UV sampling) and
-**灯效** (one shared list). Use **程序灯效** or **视频灯效** to add a row. Lower
+**灯效** (one shared list). Use **添加灯效** or **视频灯效** to add a row. Lower
 rows overlay upper rows; moving a video across a procedural row changes their
-composition order. Both types use the same master switch, timing, fades,
+composition order. Hover over the **?** beside the master switch for ordering
+help, or click it to open the help popup. Both types use the same master switch, timing, fades,
 influence and blend controls. Video rows additionally expose a local source,
 source-duration lock/looping, and captured projection view/targets.
 

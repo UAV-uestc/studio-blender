@@ -25,13 +25,36 @@ def refresh(scene, *, images=False):
                 area.tag_redraw()
 
 
+class DroneAnimLightEffectsHelpOperator(Operator):
+    bl_idname = "drones_anim.light_effects_help"
+    bl_label = "灯效列表帮助"
+    bl_description = (
+        "灯效从上到下依次叠加，下方效果优先。"
+        "视频与其他灯效可以混合排序；使用右侧箭头调整顺序。点击查看帮助"
+    )
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_popup(self, width=340)
+
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text="灯效按列表从上到下依次叠加。")
+        layout.label(text="下方效果优先，视频与其他灯效可混排。")
+        layout.label(text="使用列表右侧箭头调整顺序。")
+        layout.separator()
+        layout.label(text="混合模式和影响程度会影响叠加结果。")
+
+    def execute(self, context):
+        return {"FINISHED"}
+
+
 class DroneAnimLightStackOperator(Operator):
     bl_idname = "drones_anim.light_effect_stack"
     bl_label = "编辑灯光效果"
     bl_options = {"REGISTER", "UNDO"}
 
     action: EnumProperty(items=(
-        ("ADD", "程序灯效", ""), ("ADD_VIDEO", "视频灯效", ""), ("REMOVE", "删除", ""),
+        ("ADD", "添加灯效", ""), ("ADD_VIDEO", "视频灯效", ""), ("REMOVE", "删除", ""),
         ("DUPLICATE", "复制", ""), ("UP", "上移", ""), ("DOWN", "下移", ""),
         ("START", "起始设为当前帧", ""), ("END", "结束设为当前帧", ""),
     ))
@@ -44,7 +67,7 @@ class DroneAnimLightStackOperator(Operator):
         stack = context.scene.drones_anim_light_effects
         if self.action in {"ADD", "ADD_VIDEO"}:
             video = self.action == "ADD_VIDEO"
-            effect = stack.append_effect("视频灯效" if video else "程序灯效", effect_type="VIDEO" if video else "COLOR_RAMP")
+            effect = stack.append_effect("视频灯效" if video else "灯效", effect_type="VIDEO" if video else "COLOR_RAMP")
             effect.frame_start = context.scene.frame_current
         elif stack.active_entry is None:
             return {"CANCELLED"}
