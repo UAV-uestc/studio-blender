@@ -1,7 +1,6 @@
 """Scene export and dependency-free Level 5 MAT writing."""
 
 import os
-import re
 import struct
 import sys
 import tempfile
@@ -10,6 +9,7 @@ from dataclasses import dataclass
 from math import floor
 from pathlib import Path
 
+from .light_effects.indexing import natural_name_key
 from .sampling import SamplingPlan, sampling_plan
 
 
@@ -90,16 +90,14 @@ def _export_drones(scene):
             and obj.name in scene.objects
         ]
     # Tagged objects remain exportable even if their attachment is removed.
-    drones.sort(key=lambda obj: [
-        (1, int(part)) if part.isdigit() else (0, part.casefold())
-        for part in re.split(r"(\d+)", obj.name)
-    ])
+    drones.sort(key=lambda obj: natural_name_key(obj.name))
     return drones
 
 
 def _sample_drones(context, drones, plan):
-    """Sample world positions and object RGB on the same evaluated frames."""
+    """Sample world positions and final procedural RGB at identical times."""
     from . import safety
+    from .light_effects.runtime import final_colors
 
     scene = context.scene
     samples = {name: array("d") for name in "xyzrgb"}
@@ -111,11 +109,13 @@ def _sample_drones(context, drones, plan):
             integer_frame = floor(frame)
             scene.frame_set(integer_frame, subframe=frame - integer_frame)
             depsgraph = context.evaluated_depsgraph_get()
+            ordered, colors, _errors = final_colors(scene, depsgraph)
+            final_by_id = {drone.as_pointer(): color for drone, color in zip(ordered, colors)}
             for drone in drones:
                 evaluated = drone.evaluated_get(depsgraph)
                 for axis, value in zip("xyz", evaluated.matrix_world.translation):
                     samples[axis].append(value)
-                for channel, value in zip("rgb", evaluated.color):
+                for channel, value in zip("rgb", final_by_id[drone.as_pointer()]):
                     samples[channel].append(min(1.0, max(0.0, value)) * 255.0)
             context.window_manager.progress_update(column + 1)
     finally:
