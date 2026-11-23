@@ -389,14 +389,6 @@ def unregister():
         if overlay:
             overlay.enabled = False
 
-    # Remove RNA properties before unregistering the PropertyGroup types they
-    # reference. Otherwise even another add-on's tooltip can follow a dangling
-    # Scene.skybrush pointer while resolving its own property path.
-    if hasattr(Scene, "skybrush"):
-        del Scene.skybrush
-    if hasattr(Object, "skybrush"):
-        del Object.skybrush
-
     for header in reversed(headers):
         unregister_header(header)
     for panel in reversed(panels):
