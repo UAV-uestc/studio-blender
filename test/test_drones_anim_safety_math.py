@@ -5,10 +5,16 @@ import random
 import sys
 import unittest
 from pathlib import Path
+from types import ModuleType
 
 
 path = Path(__file__).resolve().parents[1] / "dronesAnim" / "safety_math.py"
-spec = importlib.util.spec_from_file_location("drones_anim_safety_math", path)
+# Load pure modules in a namespace package without executing the bpy add-on entrypoint.
+package_name = "drones_anim_safety_tests"
+package = ModuleType(package_name)
+package.__path__ = [str(path.parent)]
+sys.modules[package_name] = package
+spec = importlib.util.spec_from_file_location(f"{package_name}.safety_math", path)
 module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)

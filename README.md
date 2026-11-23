@@ -107,3 +107,47 @@ uv run --with pillow python etc/scripts/render_light_effect_preset_gifs.py \
   --drone-count 100 \
   --draw-connector-line
 ```
+
+## Non-numba branch integration
+
+The local `merge/non-numba` branch integrates these source tips:
+
+- `main`: `0f2a048`
+- `led`: `554f32a`
+- `feat/video-led-projection`: `29e7d35`
+
+The `numba` branch is excluded. The `dronesAnim` conflict resolution keeps both
+procedural light effects and video projection: evaluated object colors feed the
+procedural stack, then active video effects overlay the result. Video list order
+and target selection retain their existing meaning. Markers, evaluated material
+colors, and MAT samples share the final-color evaluator. Invalid effects are
+reported in preview and stop MAT sampling; sampling restores the original frame
+on both success and failure. Video setting changes invalidate the shared cache.
+
+Run the isolated integration check on Windows:
+
+```powershell
+& 'C:/Program Files/Blender Foundation/Blender 5.2/blender.exe' --background --factory-startup --python-exit-code 1 --python test/blender_non_numba_merge_smoke.py
+# In a Python environment containing NumPy, SciPy and pytest:
+python test/verify_non_numba_mat.py
+$env:PYTHONPATH = 'src/modules'
+python -m pytest test
+```
+
+The Blender check uses synthetic decoded video pixels to verify projection,
+composition, target scope, frame boundaries, preview/sample consistency, scene
+restoration, deterministic samples, and registration lifecycle. It writes two
+MAT fixtures and a JSON report under the ignored `tmp/non-numba-merge/` folder;
+the separate SciPy reader checks their keys, dtypes, dimensions, row order,
+world positions, finite values, endpoints and colors (absolute tolerance 1e-6).
+
+Native movie decoding and interactive video export still require Blender's GUI
+and are not established by this background test. The current legacy MAT schema
+is preserved (`x`, `y`, `z`, `r`, `g`, `b`: double matrices, drones by samples;
+`Qn`: zero-based double row indices). This merge does not migrate it to the
+planned canonical `t`/`id`/`xyz`/`rgb` contract or establish flight safety.
+
+Validation on Blender 5.2.1 LTS: the isolated integration smoke test and independent
+SciPy MAT round trip passed; the repository suite passed all 131 tests. The safety
+math test loader now provides package context for its relative imports without
+importing Blender. Changed Python sources also passed `py_compile`.
