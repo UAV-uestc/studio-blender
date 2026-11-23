@@ -88,3 +88,41 @@ def sampling_plan(start, end, mode=SamplingMode.SCENE, target_fps=24.0):
         fps = target_fps
         frame_step = scene_fps / target_fps
     return SamplingPlan(start, end, scene_fps, mode, target_fps, intervals, fps, frame_step)
+
+
+@dataclass(frozen=True)
+class PatternStudioSamplingPlan:
+    start: int
+    end: int
+    scene_fps: float
+    count: int
+    fps: int = 30
+
+    @property
+    def duration(self):
+        """Playback duration, including the final sample's hold interval."""
+        return self.count / self.fps
+
+    def frame_at(self, index):
+        if not 0 <= index < self.count:
+            raise IndexError(index)
+        return self.start + index * self.scene_fps / self.fps
+
+    def __iter__(self):
+        for index in range(self.count):
+            yield self.frame_at(index)
+
+
+def pattern_studio_sampling_plan(start, end, scene_fps):
+    """Sample [start, end); round a partial playback interval up to 1/30 s."""
+    if end <= start:
+        raise ValueError("终止帧必须大于起始帧（不包含终止帧）")
+    if not isfinite(scene_fps) or scene_fps <= 0:
+        raise ValueError("场景帧率必须为正数")
+    requested = (end - start) * 30 / scene_fps
+    if not isfinite(requested):
+        raise ValueError("采样数量超出范围")
+    nearest = round(requested)
+    if nearest > 0 and abs(requested - nearest) <= 8 * ulp(requested):
+        requested = nearest
+    return PatternStudioSamplingPlan(start, end, scene_fps, max(1, ceil(requested)))

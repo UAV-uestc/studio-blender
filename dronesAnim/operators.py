@@ -1,13 +1,13 @@
 from pathlib import Path
 
 import bpy
-from bpy.props import EnumProperty, FloatProperty, IntProperty, PointerProperty, StringProperty
+from bpy.props import FloatProperty, IntProperty, PointerProperty, StringProperty
 from bpy.types import Context, Operator, Panel, PropertyGroup, Scene
 from bpy_extras.io_utils import ExportHelper
 
 from .drones import create_drone, create_drone_mesh, drone_names, get_drone_collection
 from .mat_export import export_mat
-from .sampling import SamplingMode, sampling_plan
+from .sampling import pattern_studio_sampling_plan
 
 __all__ = ()
 
@@ -31,24 +31,9 @@ class DroneAnimPanelProperties(PropertyGroup):
 
     end_frame: IntProperty(
         name="终止帧",
-        description="导出终止帧，使用场景时间轴帧号，包含此帧",
+        description="导出终止帧，使用场景时间轴帧号，不包含此帧",
         default=250,
         min=0,
-    )
-
-    sampling_mode: EnumProperty(
-        name="采样方案",
-        items=(
-            (SamplingMode.SCENE.value, "场景帧率", "制作前设置场景帧率，导出时逐整数帧采样，不另设采样帧率"),
-            (SamplingMode.UNIFORM.value, "全等间隔", "取 n=round(t*k) 个区间并均分首尾范围，允许子帧；实际帧率 k'=n/t，t 为时长，k 为目标帧率"),
-            (SamplingMode.END_ALIGNED.value, "固定帧率", "按 1/k 秒固定间隔采样，末帧对齐右边界，末段可能不足 1/k 秒；k 为目标帧率"),
-        ),
-        default=SamplingMode.SCENE.value,
-    )
-
-    sampling_fps: FloatProperty(
-        name="目标帧率", description="MAT采样帧率",
-        default=24.0, min=0.001, soft_max=120.0, precision=3,
     )
 
 
@@ -204,8 +189,8 @@ class ExportMATOperator(Operator, ExportHelper):
         if context.scene is None:
             return False
         props = context.scene.drones_anim_panel
-        if props.end_frame < props.start_frame:
-            cls.poll_message_set("终止帧不能小于起始帧")
+        if props.end_frame <= props.start_frame:
+            cls.poll_message_set("终止帧必须大于起始帧（不包含终止帧）")
             return False
         return True
 
@@ -226,10 +211,9 @@ class ExportMATOperator(Operator, ExportHelper):
         except Exception as exc:
             self.report({"ERROR"}, f"MAT导出失败: {exc}")
             return {"CANCELLED"}
-        rate = f"，{result.plan.fps:.6g} fps" if result.plan.intervals else ""
         self.report(
             {"INFO"},
-            f"已导出 {result.drone_count} 架无人机，{result.plan.count} 个样本{rate}: {result.destination}",
+            f"已导出 {result.drone_count} 架无人机，{result.plan.count} 帧，{result.plan.fps} fps: {result.destination}",
         )
         return {"FINISHED"}
 
@@ -254,23 +238,16 @@ class DroneAnimPanel(Panel):
         layout.separator()
 
         layout.prop(props, "start_frame", text="起始帧")
-        layout.prop(props, "end_frame", text="终止帧")
-        layout.prop(props, "sampling_mode")
-        if props.sampling_mode != SamplingMode.SCENE.value:
-            layout.prop(props, "sampling_fps")
-        if props.end_frame >= props.start_frame:
-            try:
-                plan = sampling_plan(
-                    props.start_frame, props.end_frame, props.sampling_mode, props.sampling_fps,
-                )
-                label = "实际帧率" if plan.mode == SamplingMode.UNIFORM else "导出帧率"
-                if plan.intervals:
-                    layout.label(text=f"{label}：{plan.fps:.6g} fps")
-                layout.label(text=f"共 {plan.count} 个样本 / {plan.duration:.6g} 秒")
-                if plan.mode == SamplingMode.END_ALIGNED and plan.last_interval is not None:
-                    layout.label(text=f"末段间隔：{plan.last_interval:.6g} 秒")
-            except ValueError as exc:
-                layout.label(text=str(exc), icon="ERROR")
+        layout.prop(props, "end_frame", text="结束帧（不包含）")
+        layout.label(text="Pattern Studio · 固定 30 fps")
+        try:
+            plan = pattern_studio_sampling_plan(
+                props.start_frame, props.end_frame,
+                context.scene.render.fps / context.scene.render.fps_base,
+            )
+            layout.label(text=f"共 {plan.count} 帧 / {plan.duration:.6g} 秒")
+        except ValueError as exc:
+            layout.label(text=str(exc), icon="ERROR")
 
         layout.operator(
             ExportMATOperator.bl_idname,

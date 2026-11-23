@@ -16,7 +16,7 @@ bl_info = {
     "author": "liamy",
     "description": "Add animations to drones in Blender",
     "blender": (4, 2, 0),
-    "version": (0, 0, 1),
+    "version": (1, 1, 3),
     "location": "",
     "warning": "",
     "category": "Generic",
