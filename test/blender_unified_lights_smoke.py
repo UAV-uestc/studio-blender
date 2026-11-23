@@ -74,9 +74,9 @@ def main():
         with patch.object(video_projection, "read_video_frame", return_value=decoded):
             scene.frame_set(1)
             np.testing.assert_allclose(rgb(scene), [(0, 0, 1)])
-            bpy.ops.drones_anim.light_effect_stack(action="UP")
-            np.testing.assert_allclose(rgb(scene), [(0, 1, 0)])
             bpy.ops.drones_anim.light_effect_stack(action="DOWN")
+            np.testing.assert_allclose(rgb(scene), [(0, 1, 0)])
+            bpy.ops.drones_anim.light_effect_stack(action="UP")
             video = stack.active_entry
             video.influence = 0.5
             np.testing.assert_allclose(rgb(scene), [(0, 0.5, 0.5)])
@@ -104,10 +104,10 @@ def main():
                 count, warnings = io.import_data(scene, exported)
             assert count == 2 and not warnings, warnings
             imported = list(stack.entries)[-2:]
-            assert [entry.type for entry in imported] == ["COLOR_RAMP", "VIDEO"]
-            assert imported[1].video_targets[0].drone == drone
-            assert imported[1].video_view_captured
-            stack.active_entry_index = len(stack.entries) - 1
+            assert [entry.type for entry in imported] == ["VIDEO", "COLOR_RAMP"]
+            assert imported[0].video_targets[0].drone == drone
+            assert imported[0].video_view_captured
+            stack.active_entry_index = len(stack.entries) - 2
             selected = io.export_data(stack, filter="SELECTED")
             assert list(selected.values())[0]["video"] == exported["Blue video"]["video"]
             np.testing.assert_allclose(rgb(scene), [(0, 0, 1)])
@@ -166,7 +166,7 @@ def main():
             scene.keyframe_insert(data_path=old_path, frame=2)
             scene.frame_set(1)
             migration.migrate_scene(scene)
-            assert [entry.name for entry in stack.entries] == ["Legacy green", "Legacy low", "Legacy high"]
+            assert [entry.name for entry in stack.entries] == ["Legacy high", "Legacy low", "Legacy green"]
             assert len(legacy.video_effects) == 0
             migration.migrate_scene(scene)
             assert len(stack.entries) == 3
@@ -174,9 +174,9 @@ def main():
         ad = scene.animation_data
         bag = anim_utils.action_get_channelbag_for_slot(ad.action, ad.action_slot)
         paths = [curve.data_path for curve in bag.fcurves]
-        assert "drones_anim_light_effects.entries[2].frame_start" in paths, paths
+        assert "drones_anim_light_effects.entries[0].frame_start" in paths, paths
         scene.frame_set(2)
-        assert stack.entries[2].frame_start == 2
+        assert stack.entries[0].frame_start == 2
         # Legacy procedural master-off does not accidentally enable old programs.
         stack.enabled = False
         old = legacy.video_effects.add()
@@ -184,10 +184,10 @@ def main():
         old.video_enabled = True
         setup_video(old, texture)
         migration.migrate_scene(scene)
-        assert stack.enabled and stack.entries[-1].enabled
-        assert all(not entry.enabled for entry in list(stack.entries)[:-1])
+        assert stack.enabled and stack.entries[0].enabled
+        assert all(not entry.enabled for entry in list(stack.entries)[1:])
         report = {"blender": bpy.app.version_string, "status": "passed",
-                  "panels": ["LED", "灯效"], "list_priority": "lower rows overlay upper rows",
+                  "panels": ["LED", "灯效"], "list_priority": "upper rows overlay lower rows",
                   "checks": ["mixed order", "blend strength", "master switch", "duplicate/remove",
                              "video looping", "JSON round trip", "invalid JSON rejection",
                              "panel draw branches", "legacy migration", "keyframe remapping"]}

@@ -79,6 +79,10 @@ def _get_frame_end(effect):
     return effect.frame_start + effect.duration - 1
 
 
+def _get_list_tooltip(effect):
+    return f"{effect.name}\n生效帧范围：[{effect.frame_start}-{effect.frame_end}]（含起止帧）"
+
+
 def _set_frame_end(effect, value):
     if value <= effect.frame_start:
         effect.frame_start = value
@@ -126,6 +130,14 @@ def _effect_type_changed(effect, context):
     _effect_changed(effect, context)
 
 
+def _drag_requested(effect, context):
+    if not effect.drag_handle:
+        return
+    effect.drag_handle = False
+    if context.window is not None and context.area is not None and context.region is not None:
+        bpy.ops.drones_anim.drag_light_effect("INVOKE_DEFAULT", effect_id=effect.effect_id)
+
+
 def _name_updated(effect, _context):
     scene = effect.id_data
     stack = getattr(scene, "drones_anim_light_effects", None)
@@ -151,8 +163,15 @@ class DroneAnimLightVideoTarget(PropertyGroup):
 class DroneAnimLightEffect(PropertyGroup):
     """Settings and texture references for one procedural or video effect."""
 
+    drag_handle: BoolProperty(
+        name="拖动灯效", description="按住六点手柄上下拖动，松开后调整顺序",
+        default=False, options={"SKIP_SAVE", "HIDDEN"}, update=_drag_requested,
+    )
     effect_id: StringProperty(name="Identifier", options={"HIDDEN"})
     name: StringProperty(name="Name", default="Untitled", update=_name_updated)
+    list_tooltip: StringProperty(
+        get=_get_list_tooltip, options={"SKIP_SAVE", "HIDDEN"},
+    )
     enabled: BoolProperty(name="Enabled", default=True, update=_effect_changed)
     type: EnumProperty(
         name="Effect type",
@@ -228,6 +247,7 @@ class DroneAnimLightEffectCollection(PropertyGroup):
     enabled: BoolProperty(name="Light effects", default=True, update=_effect_changed)
     entries: CollectionProperty(type=DroneAnimLightEffect)
     active_entry_index: IntProperty(name="Active effect", default=0, min=0)
+    drag_target: IntProperty(default=-1, options={"SKIP_SAVE", "HIDDEN"})
     random_seed: IntProperty(name="Random seed", default=0, update=_effect_changed)
 
     @property
@@ -235,15 +255,16 @@ class DroneAnimLightEffectCollection(PropertyGroup):
         index = self.active_entry_index
         return self.entries[index] if 0 <= index < len(self.entries) else None
 
-    def append_effect(self, name="Untitled", *, select=True, effect_type="COLOR_RAMP", at_top=False):
-        self.list_version = 1
+    def append_effect(self, name="Untitled", *, select=True, effect_type="COLOR_RAMP", at_top=True):
+        self.list_version = 2
         entry = self.entries.add()
         entry.effect_id = uuid4().hex
         entry.name = name
         entry.type = effect_type
         index = len(self.entries) - 1
         if at_top:
-            self.entries.move(index, 0)
+            from .ordering import move
+            move(self.id_data, index, 0)
             index = 0
         if select:
             self.active_entry_index = index
@@ -299,7 +320,8 @@ class DroneAnimLightEffectCollection(PropertyGroup):
         copy.duration = source.duration
         for target in source.video_targets:
             copy.video_targets.add().drone = target.drone
-        self.entries.move(len(self.entries) - 1, index + 1)
+        from .ordering import move
+        move(self.id_data, len(self.entries) - 1, index + 1)
         self.active_entry_index = index + 1
         return self.active_entry
 
@@ -329,7 +351,8 @@ class DroneAnimLightEffectCollection(PropertyGroup):
         index = self.active_entry_index
         destination = index + direction
         if self.active_entry is not None and 0 <= destination < len(self.entries):
-            self.entries.move(index, destination)
+            from .ordering import move
+            move(self.id_data, index, destination)
             self.active_entry_index = destination
             _effect_changed(self, None)
 

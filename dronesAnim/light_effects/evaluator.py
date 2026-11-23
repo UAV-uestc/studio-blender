@@ -77,8 +77,8 @@ def evaluate_stack(scene, drones, positions, base_colors, depsgraph, image_cache
     mapping = vertex_indices(drones)
     errors = []
 
-    # Later rows overlay earlier rows, regardless of effect type.
-    for effect in stack.entries:
+    # Evaluate low priority first: top rows overlay the rows below.
+    for effect in reversed(stack.entries):
         active = video_is_active(effect, frame) if effect.type == "VIDEO" else contains_frame(effect.frame_start, effect.duration, frame)
         if not effect.enabled or not active:
             continue

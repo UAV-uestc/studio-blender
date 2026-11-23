@@ -96,7 +96,7 @@ def export_data(stack, *, filter="ALL"):
             raise ValueError(f"Duplicate effect name: {entry.name}")
         result[entry.name] = effect_data(entry)
         # Per-entry metadata remains ignorable by Skybrush's field-based reader.
-        result[entry.name]["droneAnim"] = {"version": 1, "randomSeed": stack.random_seed}
+        result[entry.name]["droneAnim"] = {"version": 1, "randomSeed": stack.random_seed, "listOrder": "TOP_FIRST"}
     return result
 
 
@@ -142,6 +142,8 @@ def validate_entry(name, data):
     if metadata is not None:
         if not isinstance(metadata, dict) or metadata.get("version", 1) != 1:
             raise UnsupportedEffect(f"{name}: unsupported DroneAnim metadata")
+        if metadata.get("listOrder", "BOTTOM_FIRST") not in {"TOP_FIRST", "BOTTOM_FIRST"}:
+            raise ValueError(f"{name}: invalid list order")
         if "randomSeed" in metadata:
             number(metadata["randomSeed"], "randomSeed", integer=True, minimum=-2147483648, maximum=2147483647)
     if data.get("type") == "VIDEO":
@@ -287,6 +289,13 @@ def import_data(scene, data, *, filter="ALL"):
             warnings.append(str(exc))
             continue
         planned.append((name, settings))
+    orders = {(settings.get("droneAnim") or {}).get("listOrder", "BOTTOM_FIRST") for _, settings in planned}
+    if len(orders) > 1:
+        raise ValueError("Imported effects specify conflicting list orders")
+    if orders == {"BOTTOM_FIRST"}:
+        planned.reverse()
+    from .ordering import migrate_priority
+    migrate_priority(scene)
     stack = scene.drones_anim_light_effects
     start, active, seed = len(stack.entries), stack.active_entry_index, stack.random_seed
     seeds = {(settings.get("droneAnim") or {}).get("randomSeed") for _, settings in planned}

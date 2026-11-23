@@ -6,9 +6,11 @@ from .runtime import base_color_edit
 def migrate_scene(scene):
     stack = scene.drones_anim_light_effects
     legacy = scene.drones_anim_led
-    # Existing procedural rows keep both their order and animation paths.
-    stack.list_version = 1
+    from .ordering import migrate_priority, reorder
+
+    previous_version = stack.list_version
     if not legacy.video_effects:
+        migrate_priority(scene)
         return
     # Preserve the old video-over-procedural behavior, including when the old
     # procedural master switch was off, by disabling those individual rows.
@@ -46,6 +48,13 @@ def migrate_scene(scene):
             stack.enabled = True
         stack.active_entry_index = original_count + count - 1 - min(legacy.video_effect_index, count - 1)
         legacy.video_effects.clear()
+        if previous_version < 2:
+            stack.list_version = previous_version
+            migrate_priority(scene)
+        else:
+            order = list(reversed(range(original_count, len(stack.entries)))) + list(range(original_count))
+            reorder(scene, order)
+        stack.list_version = 2
 
 
 def remap_video_animation(scene, start, count):

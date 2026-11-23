@@ -28,21 +28,15 @@ def refresh(scene, *, images=False):
 class DroneAnimLightEffectsHelpOperator(Operator):
     bl_idname = "drones_anim.light_effects_help"
     bl_label = "灯效列表帮助"
-    bl_description = (
-        "灯效从上到下依次叠加，下方效果优先。"
-        "视频与其他灯效可以混合排序；使用右侧箭头调整顺序。点击查看帮助"
-    )
+    bl_description = "灯效列表优先级降序（上方灯效覆盖下方灯效），可以直接拖动灯效调整顺序。"
 
     def invoke(self, context, event):
         return context.window_manager.invoke_popup(self, width=340)
 
     def draw(self, context):
         layout = self.layout
-        layout.label(text="灯效按列表从上到下依次叠加。")
-        layout.label(text="下方效果优先，视频与其他灯效可混排。")
-        layout.label(text="使用列表右侧箭头调整顺序。")
-        layout.separator()
-        layout.label(text="混合模式和影响程度会影响叠加结果。")
+        layout.label(text="灯效列表优先级降序（上方灯效覆盖下方灯效），")
+        layout.label(text="可以直接拖动灯效调整顺序。")
 
     def execute(self, context):
         return {"FINISHED"}

@@ -215,12 +215,12 @@ def project_uv(positions, view_matrix, viewport_size, aspect):
 
 
 def projected_colors(effects, scene_frame, positions, base_colors, *, drones=None, return_mask=False):
-    """Apply shared-list rows in order over the original LED colors."""
+    """Apply low-priority rows first; the shared list has highest priority on top."""
     colors = np.array(base_colors, dtype=np.float64)
     positions = np.asarray(positions, dtype=np.float64)
     drone_indices = None
     affected = np.zeros(len(colors), dtype=bool)
-    for effect in effects:
+    for effect in reversed(effects):
         if not effect.video_view_captured:
             raise ValueError(f"{effect.name}：请先捕获投影视角")
         target_indices = None

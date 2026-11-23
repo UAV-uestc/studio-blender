@@ -40,10 +40,19 @@ def output_controls(layout, effect, *, y=False):
 
 class DRONESANIM_UL_light_effects(UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
-        row = layout.row(align=True)
+        # List rows must not inherit the panel's label/value split: an icon-only
+        # grip would otherwise reserve a large empty label column.
+        layout.use_property_split = False
+        layout.use_property_decorate = False
+        split = layout.split(factor=0.07, align=True)
+        grip = split.row(align=True)
+        grip.alignment = "LEFT"
+        grip.prop(item, "drag_handle", text="", icon="GRIP_V", toggle=True, emboss=False)
+        row = split.row(align=True)
         row.prop(item, "enabled", text="")
         row.prop(item, "name", text="", emboss=False, icon="FILE_MOVIE" if item.type == "VIDEO" else "TEXTURE")
-        row.label(text=f"{item.frame_start}–{item.frame_end}")
+        if data.drag_target == index:
+            row.label(text="", icon="BACK")
 
 
 class DroneAnimLightEffectsPanel(Panel):
@@ -67,7 +76,10 @@ class DroneAnimLightEffectsPanel(Panel):
         stack_button(row, "ADD", text="添加灯效", icon="ADD")
         stack_button(row, "ADD_VIDEO", text="视频灯效", icon="FILE_MOVIE")
         row = layout.row()
-        row.template_list("DRONESANIM_UL_light_effects", "", stack, "entries", stack, "active_entry_index", rows=4, sort_lock=True)
+        row.template_list(
+            "DRONESANIM_UL_light_effects", "", stack, "entries", stack, "active_entry_index",
+            rows=4, sort_lock=True, item_dyntip_propname="list_tooltip",
+        )
         buttons = row.column(align=True)
         editing = buttons.column(align=True)
         editing.enabled = stack.active_entry is not None
