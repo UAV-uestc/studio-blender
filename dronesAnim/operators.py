@@ -247,14 +247,43 @@ class DroneAnimAttachmentHelpOperator(Operator):
         layout.label(text="在源网格的每个顶点创建一架无人机。")
         layout.label(text="处理范围为当前场景的全部网格，隐藏网格也会参与。")
         layout.separator()
+        layout.label(text="模型采用二十面体球（Icosphere）。")
         layout.label(text="半径：新生成球体的大小，直径为半径的两倍。")
         layout.label(text="细分等级：数值越高，球体越圆，模型开销越大。")
-        layout.label(text="这两个参数在生成无人机时应用。")
+        layout.label(text="默认等级为 2：42 个顶点、80 个三角面。")
+        layout.label(text="这两个参数在生成时应用，不会改变已有无人机。")
         layout.separator()
         layout.label(text="生成后编辑源网格顶点，无人机会跟随对应位置。")
         layout.label(text="已有顶点附着时，再点附着按钮会删除整组无人机。", icon="ERROR")
         layout.label(text="删除会一并移除这些无人机的位置与颜色关键帧。")
         layout.label(text="清除后再次点击，按当前网格顶点重新生成。")
+
+
+class DroneAnimCurveMeshHelpOperator(Operator):
+    bl_idname = "drones_anim.curve_mesh_help"
+    bl_label = "曲线生成 Mesh 帮助"
+    bl_description = "查看曲线选择、数量分配、间距和网格编辑说明"
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_popup(self, width=440)
+
+    def execute(self, context):
+        return {"FINISHED"}
+
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text="在物体模式选中一条或多条曲线，再点击生成 Mesh。")
+        layout.separator()
+        layout.label(text="顶点数：全部所选曲线的合计数量，按长度比例分配。")
+        layout.label(text="每条样条上的顶点沿曲线长度均匀排列。")
+        layout.label(text="间距：保留开放曲线两端，取整分段后均分。")
+        layout.label(text="实际间距通常略大；曲线过短时按最少点数生成。")
+        layout.label(text="闭合曲线首尾相连，起点只生成一个顶点。")
+        layout.separator()
+        layout.label(text="结果是当前帧的静态 Mesh，原曲线继续保留。")
+        layout.label(text="选中结果按 Tab 进入编辑模式，用 G 调整顶点。")
+        layout.label(text="再次生成会新增一份 Mesh。")
+        layout.label(text="需要无人机时，再使用“无人机附着顶点”。")
 
 
 class DroneAnimPanel(Panel):
@@ -281,7 +310,9 @@ class DroneAnimPanel(Panel):
         )
 
         box = layout.box()
-        box.label(text="曲线生成 Mesh")
+        header = box.row(align=True)
+        header.label(text="曲线生成 Mesh")
+        header.operator("drones_anim.curve_mesh_help", text="", icon="QUESTION", emboss=False)
         row = box.row(align=True)
         row.prop(props, "curve_point_count", text="顶点数")
         by_count = row.operator("drones_anim.curves_to_mesh", text="生成 Mesh")
@@ -306,7 +337,9 @@ class DroneAnimMATExportPanel(Panel):
 
         layout.prop(props, "start_frame", text="起始帧")
         layout.prop(props, "end_frame", text="结束帧（不包含）")
-        layout.label(text="Pattern Studio · 固定 30 fps")
+        scene_fps = context.scene.render.fps / context.scene.render.fps_base
+        if abs(scene_fps - 30.0) > 1e-6:
+            layout.label(text=f"场景 {scene_fps:.6g} fps，导出将重采样为 30 fps", icon="ERROR")
         try:
             plan = pattern_studio_sampling_plan(
                 props.start_frame, props.end_frame,
