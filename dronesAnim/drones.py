@@ -14,12 +14,12 @@ def get_drone_collection(scene):
     return collection
 
 
-def create_drone_mesh(radius=0.1):
+def create_drone_mesh(radius=0.1, subdivisions=2):
     mesh = bpy.data.meshes.new("Drone Anim Mesh Template")
     bm = bmesh.new()
     try:
         bmesh.ops.create_icosphere(
-            bm, subdivisions=2, radius=radius, matrix=Matrix(), calc_uvs=True
+            bm, subdivisions=subdivisions, radius=radius, matrix=Matrix(), calc_uvs=True
         )
         bm.to_mesh(mesh)
     finally:

@@ -93,7 +93,6 @@ class DroneAnimLightEffectsPanel(Panel):
             return
         box = layout.box()
         box.prop(effect, "name", text="名称")
-        box.prop(effect, "enabled", text="启用此效果")
         box.prop(effect, "frame_start", text="起始帧")
         if effect.type == "VIDEO":
             end = box.row(align=True)

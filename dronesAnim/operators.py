@@ -13,6 +13,11 @@ __all__ = ()
 
 
 class DroneAnimPanelProperties(PropertyGroup):
+    curve_point_count: IntProperty(name="顶点总数", default=100, min=2, max=10000)
+    curve_point_spacing: FloatProperty(
+        name="间距", description="沿曲线的目标间距，保留端点后均分，实际间距通常略大",
+        default=2.0, min=0.001, unit="LENGTH",
+    )
     drone_radius: FloatProperty(
         name="无人机半径",
         description="新建无人机的半径",
@@ -20,6 +25,11 @@ class DroneAnimPanelProperties(PropertyGroup):
         min=0.001,
         unit="LENGTH",
         subtype="DISTANCE",
+    )
+
+    drone_subdivisions: IntProperty(
+        name="细分等级", description="新生成无人机球体的 Icosphere 细分等级",
+        default=2, min=1, max=5, soft_max=3,
     )
 
     start_frame: IntProperty(
@@ -141,7 +151,10 @@ class AttachDronesToVerticesOperator(Operator):
                     evaluated.to_mesh_clear()
 
             drone_collection = get_drone_collection(scene)
-            template_mesh = create_drone_mesh(radius=scene.drones_anim_panel.drone_radius)
+            template_mesh = create_drone_mesh(
+                radius=scene.drones_anim_panel.drone_radius,
+                subdivisions=scene.drones_anim_panel.drone_subdivisions,
+            )
             try:
                 names = iter(tuple(drone_names(count)))
                 for obj, positions in positions_by_object.items():
@@ -218,6 +231,32 @@ class ExportMATOperator(Operator, ExportHelper):
         return {"FINISHED"}
 
 
+class DroneAnimAttachmentHelpOperator(Operator):
+    bl_idname = "drones_anim.attachment_help"
+    bl_label = "无人机附着帮助"
+    bl_description = "查看生成参数、顶点附着和重新生成的说明"
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_popup(self, width=440)
+
+    def execute(self, context):
+        return {"FINISHED"}
+
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text="在源网格的每个顶点创建一架无人机。")
+        layout.label(text="处理范围为当前场景的全部网格，隐藏网格也会参与。")
+        layout.separator()
+        layout.label(text="半径：新生成球体的大小，直径为半径的两倍。")
+        layout.label(text="细分等级：数值越高，球体越圆，模型开销越大。")
+        layout.label(text="这两个参数在生成无人机时应用。")
+        layout.separator()
+        layout.label(text="生成后编辑源网格顶点，无人机会跟随对应位置。")
+        layout.label(text="已有顶点附着时，再点附着按钮会删除整组无人机。", icon="ERROR")
+        layout.label(text="删除会一并移除这些无人机的位置与颜色关键帧。")
+        layout.label(text="清除后再次点击，按当前网格顶点重新生成。")
+
+
 class DroneAnimPanel(Panel):
     bl_idname = "OBJECT_PT_drones_anim_panel"
     bl_label = "无人机动画"
@@ -229,13 +268,41 @@ class DroneAnimPanel(Panel):
         layout = self.layout
         props = context.scene.drones_anim_panel
 
-        layout.prop(props, "drone_radius", text="无人机半径")
-        layout.operator(
+        box = layout.box()
+        header = box.row(align=True)
+        header.label(text="无人机附着")
+        header.operator("drones_anim.attachment_help", text="", icon="QUESTION", emboss=False)
+        row = box.row(align=True)
+        row.prop(props, "drone_radius", text="半径")
+        row.prop(props, "drone_subdivisions", text="细分等级")
+        box.operator(
             AttachDronesToVerticesOperator.bl_idname,
             text="无人机附着顶点",
         )
 
-        layout.separator()
+        box = layout.box()
+        box.label(text="曲线生成 Mesh")
+        row = box.row(align=True)
+        row.prop(props, "curve_point_count", text="顶点数")
+        by_count = row.operator("drones_anim.curves_to_mesh", text="生成 Mesh")
+        by_count.mode = "COUNT"
+        row = box.row(align=True)
+        row.prop(props, "curve_point_spacing", text="间距")
+        by_distance = row.operator("drones_anim.curves_to_mesh", text="生成 Mesh")
+        by_distance.mode = "DISTANCE"
+
+
+class DroneAnimMATExportPanel(Panel):
+    bl_idname = "OBJECT_PT_drones_anim_mat_export"
+    bl_label = "导出 MAT"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "无人机动画"
+    bl_order = 10
+
+    def draw(self, context: Context) -> None:
+        layout = self.layout
+        props = context.scene.drones_anim_panel
 
         layout.prop(props, "start_frame", text="起始帧")
         layout.prop(props, "end_frame", text="结束帧（不包含）")
