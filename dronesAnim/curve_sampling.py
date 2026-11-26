@@ -10,6 +10,13 @@ from bpy.types import Operator
 
 
 def sampling_mesh(scene, source, spline_index):
+    """Return a temporary object sampling one source spline with Geometry Nodes.
+
+    Link an empty base mesh to scene and reference source through Object Info.
+    Select the zero-based spline_index, then convert its evaluated curve points
+    to vertices. Read the modifier result with sampled_positions(); the base
+    mesh stays empty. The caller must release the object with remove_helper().
+    """
     mesh = bpy.data.meshes.new(f"{source.name} Samples")
     helper = bpy.data.objects.new(f"{source.name} Samples {spline_index + 1}", mesh)
     scene.collection.objects.link(helper)
@@ -44,6 +51,12 @@ def sampling_mesh(scene, source, spline_index):
 
 
 def sampled_positions(helper, graph):
+    """Return the helper's evaluated vertices as world-space Vector copies.
+
+    Evaluate modifiers using the dependency graph, then transform each local
+    vertex coordinate with matrix_world. Always release the temporary to_mesh()
+    result; the returned coordinates remain valid after that cleanup.
+    """
     evaluated = helper.evaluated_get(graph)
     mesh = evaluated.to_mesh()
     try:
@@ -53,6 +66,11 @@ def sampled_positions(helper, graph):
 
 
 def remove_helper(helper):
+    """Delete the temporary helper and its unused mesh and node groups.
+
+    Keep data blocks that still have other users. The helper reference is no
+    longer valid after this call; the referenced source curve is untouched.
+    """
     mesh = helper.data
     trees = [modifier.node_group for modifier in helper.modifiers if modifier.type == "NODES"]
     bpy.data.objects.remove(helper, do_unlink=True)
@@ -64,6 +82,13 @@ def remove_helper(helper):
 
 
 def allocate_counts(lengths, cyclic, total):
+    """Return per-spline vertex counts proportional to world-space lengths.
+
+    lengths and cyclic are matching lists of positive lengths and closed flags.
+    Reserve at least two vertices per open spline and three per closed spline,
+    then redistribute the budget and assign rounding leftovers by remainder.
+    Counts sum to total; raise ValueError if total cannot cover the minimums.
+    """
     minimums = [3 if closed else 2 for closed in cyclic]
     if total < sum(minimums):
         raise ValueError(f"这些样条至少需要 {sum(minimums)} 个顶点（开放至少 2，闭合至少 3）")
@@ -91,7 +116,14 @@ def allocate_counts(lengths, cyclic, total):
 
 
 def uniform_samples(positions, count, closed):
-    """Interpolate equal arc-length steps on the evaluated curve."""
+    """Return count points at equal arc-length steps along a sampled polyline.
+
+    positions contains ordered coordinates with at least two distinct points.
+    Remove consecutive duplicates, accumulate segment lengths, and interpolate
+    each target distance within its segment. Open splines include both ends;
+    closed splines include the closing segment without repeating the first point.
+    Spacing follows the evaluated polyline, not straight-line point distances.
+    """
     points = [positions[0]]
     for point in positions[1:]:
         if (point - points[-1]).length > 1e-9:
@@ -113,6 +145,13 @@ def uniform_samples(positions, count, closed):
 
 
 def spacing_count(length, spacing, closed):
+    """Return a vertex count for positive spline length and target arc spacing.
+
+    Round the segment count down so actual spacing can exceed the target. Open
+    splines include both endpoints; closed splines have at least three vertices.
+    Minimum counts can make spacing smaller on short splines. Snap near-integer
+    ratios within 1e-6 to avoid losing a segment to evaluation roundoff.
+    """
     ratio = length / spacing
     # Avoid dropping a whole segment due to curve evaluation roundoff.
     nearest = round(ratio)
@@ -135,9 +174,17 @@ class DRONESANIM_OT_curves_to_mesh(Operator):
 
     @classmethod
     def poll(cls, context):
+        """Allow conversion in Object Mode when at least one curve is selected."""
         return context.mode == "OBJECT" and any(obj.type == "CURVE" for obj in context.selected_objects)
 
     def execute(self, context):
+        """Sample selected curves and create one static, editable edge mesh.
+
+        Allocate vertices by total count or target spacing, preserving separate
+        spline chains and loops. Clean up sampling helpers on success or failure;
+        remove partial output on error. Select the finished mesh without linking
+        it to the source curves or creating drones.
+        """
         sources = sorted(
             (obj for obj in context.selected_objects if obj.type == "CURVE"), key=lambda obj: obj.name
         )

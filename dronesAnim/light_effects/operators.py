@@ -4,6 +4,7 @@ import bpy
 from bpy.props import EnumProperty, StringProperty
 from bpy.types import Operator
 
+from ..manual import open_manual
 from .functions import discover_functions
 from .io import export_file, import_file
 from .runtime import invalidate, trust_store, update_scene
@@ -28,18 +29,13 @@ def refresh(scene, *, images=False):
 class DroneAnimLightEffectsHelpOperator(Operator):
     bl_idname = "drones_anim.light_effects_help"
     bl_label = "灯效列表帮助"
-    bl_description = "灯效列表优先级降序（上方灯效覆盖下方灯效），可以直接拖动灯效调整顺序。"
+    bl_description = "在浏览器中打开灯效列表手册"
 
     def invoke(self, context, event):
-        return context.window_manager.invoke_popup(self, width=340)
-
-    def draw(self, context):
-        layout = self.layout
-        layout.label(text="灯效列表优先级降序（上方灯效覆盖下方灯效），")
-        layout.label(text="可以直接拖动灯效调整顺序。")
+        return self.execute(context)
 
     def execute(self, context):
-        return {"FINISHED"}
+        return open_manual(self, "lighting/effects.html")
 
 
 class DroneAnimLightStackOperator(Operator):

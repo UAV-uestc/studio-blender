@@ -1,0 +1,35 @@
+site_name: DronesAnim 使用手册
+site_url: ""
+use_directory_urls: false
+docs_dir: docs
+site_dir: site
+theme:
+  name: material
+  language: zh
+  font: false
+extra:
+  polyfills:
+    - https://unpkg.com/iframe-worker@1.0.4/shim/index.js
+plugins:
+  - search:
+      lang: zh
+  - offline
+  - privacy
+nav:
+  - 首页: index.md
+  - 快速开始: quick-start.md
+  - 建模与附着:
+      - 无人机附着: modeling/drone-attachment.md
+      - 曲线生成 Mesh: modeling/curve-to-mesh.md
+  - 灯光:
+      - LED 基础颜色: lighting/led.md
+      - UV 纹理采样: lighting/uv-sampling.md
+      - 灯效列表: lighting/effects.md
+      - 内置灯效: lighting/presets.md
+      - 视频投影: lighting/video-projection.md
+      - JSON 复用: lighting/import-export.md
+  - 检查:
+      - 实时安全检查: validation/safety.md
+      - 运动分析: validation/motion-analysis.md
+  - 导出 MAT: export/mat.md
+  - 常见问题: troubleshooting.md
